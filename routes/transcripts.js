@@ -419,6 +419,21 @@ ${transcriptForAI}`;
         }
     });
 
+    router.get('/api/transcripts/mine', authenticateJWT, (req, res, next) => {
+        db.query(
+            `SELECT t.id, t.created_at, t.processed_json
+             FROM transcripts t
+             JOIN students s ON t.student_id = s.id
+             WHERE s.user_id = $1 AND t.academy_id = $2 AND (t.pending_match = FALSE OR t.pending_match IS NULL)
+             ORDER BY t.created_at DESC LIMIT 10`,
+            [req.user.id, req.user.academy_id],
+            (err, result) => {
+                if (err) return serverErr(res, err);
+                res.json(result.rows || []);
+            }
+        );
+    });
+
     router.get('/api/transcripts/history', authenticateJWT, requireTeacherOrAdmin, (req, res, next) => {
         let q = `
             SELECT t.id, t.created_at, t.processed_json, t.student_id, s.name as student_name
