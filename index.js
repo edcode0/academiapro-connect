@@ -57,6 +57,7 @@ const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const session = require('express-session');
 const cookieParser = require('cookie-parser');
+const cookie = require('cookie');
 const http = require('http');
 const { Server } = require("socket.io");
 
@@ -94,7 +95,11 @@ const makeTranscriptsRouter = require('./routes/transcripts');
 setNotifIo(io);
 
 io.use((socket, next) => {
-  const token = socket.handshake.auth.token;
+  let token = socket.handshake.auth?.token;
+  if (!token) {
+    const cookies = cookie.parse(socket.handshake.headers.cookie || '');
+    token = cookies.token;
+  }
   if (!token) return next(new Error('No token'));
   try {
     const user = jwt.verify(token, process.env.JWT_SECRET);
