@@ -130,11 +130,15 @@ module.exports = function makeGmailService(io) {
                     continue;
                 }
 
-                // Match student by name
-                const exactMatch = students.find(s =>
-                    s.name.toLowerCase().includes((analysisData.student_name || '').toLowerCase()) ||
-                    (analysisData.student_name || '').toLowerCase().includes(s.name.toLowerCase())
-                );
+                // Match student by name — guard against empty string (includes('') is always true)
+                const nameToMatch = (analysisData.student_name || '').trim();
+                const exactMatch = nameToMatch.length >= 2
+                    ? students.find(s => {
+                        const n = s.name.toLowerCase();
+                        const m = nameToMatch.toLowerCase();
+                        return n.includes(m) || m.includes(n);
+                      })
+                    : null;
 
                 if (!exactMatch) {
                     console.warn(`[Gmail] No student match for student_name="${analysisData.student_name}" — saving as pending`);
