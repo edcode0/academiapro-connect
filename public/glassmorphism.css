@@ -83,8 +83,8 @@ main,
   z-index: 1 !important;
 }
 
-/* 2. GLASSMORPHISM SIDEBAR */
-aside,
+/* 2. GLASSMORPHISM SIDEBAR (scoped to legacy non-sb sidebars) */
+aside:not(.sb),
 .sidebar,
 #sidebar,
 nav.sidebar {
@@ -95,7 +95,7 @@ nav.sidebar {
   box-shadow: 4px 0 24px rgba(99, 102, 241, 0.08) !important;
 }
 
-aside *,
+aside:not(.sb) *,
 .sidebar *,
 #sidebar *,
 nav.sidebar * {

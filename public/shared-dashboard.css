@@ -33,8 +33,9 @@ body {
     min-height: 100vh;
 }
 
-/* ----- SIDEBAR ----- */
-aside {
+/* ----- SIDEBAR — handled by sidebar.css (injected by global.js) ----- */
+/* Legacy fallback for pages that haven't loaded sidebar.css yet */
+aside:not(.sb) {
     width: 260px;
     background: var(--primary);
     color: var(--text-muted);
@@ -47,18 +48,8 @@ aside {
     overflow-x: hidden;
     z-index: 100;
 }
-
-aside h1 {
-    color: white;
-    font-size: 1.5rem;
-    font-weight: 800;
-    margin-bottom: 2.5rem;
-}
-
-nav {
-    flex: 1;
-}
-
+aside:not(.sb) h1 { color: white; font-size: 1.5rem; font-weight: 800; margin-bottom: 2.5rem; }
+nav { flex: 1; }
 nav a {
     color: var(--text-muted);
     text-decoration: none;
@@ -72,34 +63,8 @@ nav a {
     font-weight: 500;
     position: relative;
 }
-
-nav a:hover,
-nav a.active {
-    background: var(--accent);
-    color: white;
-}
-
-.btn-logout {
-    color: #ef4444;
-    text-decoration: none;
-    font-weight: 600;
-    padding: 0.75rem 1rem;
-    display: block;
-    border-radius: 0.5rem;
-    transition: background 0.2s;
-}
-
-.unread-badge-sidebar {
-    position: absolute;
-    right: 0.75rem;
-    background: #ef4444;
-    color: white;
-    font-size: 0.7rem;
-    padding: 2px 6px;
-    border-radius: 10px;
-    display: none;
-    font-weight: 600;
-}
+nav a:hover, nav a.active { background: var(--accent); color: white; }
+.unread-badge-sidebar { position: absolute; right: 0.75rem; background: #ef4444; color: white; font-size: 0.7rem; padding: 2px 6px; border-radius: 10px; display: none; font-weight: 600; }
 
 /* ----- MAIN CONTENT ----- */
 main {
@@ -295,12 +260,12 @@ td { padding: 1rem; border-bottom: 1px solid var(--border); font-size: 0.875rem;
 
 /* ----- RESPONSIVE ----- */
 @media (max-width: 1024px) {
-    aside { display: none; }
+    aside:not(.sb) { display: none; }
     main { margin-left: 0; }
     .stats-grid { grid-template-columns: repeat(2, 1fr) !important; }
     .hamburger-btn { display: inline-flex; align-items: center; justify-content: center; }
 
-    aside.mobile-open {
+    aside:not(.sb).mobile-open {
         display: flex !important;
         position: fixed;
         left: 0;
@@ -348,124 +313,4 @@ textarea:focus-visible {
     border-radius: 0.375rem;
 }
 
-/* ----- NAV SECTION TITLE ----- */
-.nav-section-title {
-    font-size: 0.65rem;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: rgba(255, 255, 255, 0.3);
-    padding: 1rem 1rem 0.25rem;
-    font-weight: 600;
-    pointer-events: none;
-}
-
-/* ----- SIDEBAR COLLAPSE ----- */
-.sidebar-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 2rem;
-    flex-shrink: 0;
-}
-.sidebar-header h1 {
-    margin-bottom: 0;
-    white-space: nowrap;
-    overflow: hidden;
-}
-
-.sidebar-toggle-btn {
-    width: 26px;
-    height: 26px;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    color: rgba(255, 255, 255, 0.6);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.6rem;
-    flex-shrink: 0;
-    transition: background 0.2s, color 0.2s;
-    line-height: 1;
-}
-.sidebar-toggle-btn:hover {
-    background: rgba(255, 255, 255, 0.2);
-    color: white;
-}
-
-/* Collapsed state: narrow rail */
-body.sidebar-collapsed aside {
-    width: 68px !important;
-    padding: 1.5rem 0.5rem !important;
-}
-body.sidebar-collapsed main {
-    margin-left: 68px !important;
-}
-body.sidebar-collapsed .sidebar-header {
-    justify-content: center;
-    margin-bottom: 1.5rem;
-}
-body.sidebar-collapsed .sidebar-header h1 {
-    display: none;
-}
-body.sidebar-collapsed .nav-section-title {
-    display: none !important;
-}
-body.sidebar-collapsed .user-info {
-    display: flex !important;
-    justify-content: center !important;
-    padding: 0.5rem 0 !important;
-    background: transparent !important;
-    margin-bottom: 1rem !important;
-}
-body.sidebar-collapsed .user-info strong,
-body.sidebar-collapsed .user-info > span,
-body.sidebar-collapsed .user-info > div:not(.sidebar-avatar) {
-    display: none !important;
-}
-body.sidebar-collapsed .sidebar-avatar {
-    display: flex !important;
-    margin-bottom: 0;
-}
-body.sidebar-collapsed nav a {
-    justify-content: center !important;
-    padding: 0.7rem 0 !important;
-    gap: 0 !important;
-}
-body.sidebar-collapsed .nav-text {
-    display: none !important;
-}
-body.sidebar-collapsed .nav-icon {
-    font-size: 1.3rem;
-}
-body.sidebar-collapsed .Btn {
-    margin-left: auto !important;
-    margin-right: auto !important;
-}
-
-/* ----- SIDEBAR COLLAPSE — MOBILE OVERRIDES (must be last) ----- */
-@media (max-width: 1024px) {
-    body.sidebar-collapsed aside.mobile-open {
-        width: 260px !important;
-        padding: 2rem 1.5rem !important;
-    }
-    body.sidebar-collapsed main { margin-left: 0 !important; }
-    body.sidebar-collapsed .sidebar-header { justify-content: space-between !important; }
-    body.sidebar-collapsed .sidebar-header h1 { display: block !important; }
-    body.sidebar-collapsed .nav-section-title { display: block !important; }
-    body.sidebar-collapsed .user-info {
-        display: block !important;
-        padding: 1rem !important;
-        background: rgba(255,255,255,0.05) !important;
-    }
-    body.sidebar-collapsed .user-info strong,
-    body.sidebar-collapsed .user-info > span,
-    body.sidebar-collapsed .user-info > div:not(.sidebar-avatar) { display: block !important; }
-    body.sidebar-collapsed nav a {
-        justify-content: flex-start !important;
-        padding: 0.75rem 1rem !important;
-        gap: 0.75rem !important;
-    }
-    body.sidebar-collapsed .nav-text { display: inline !important; }
-}
+/* ----- SIDEBAR AVATAR (legacy, kept for non-sb pages) ----- */
