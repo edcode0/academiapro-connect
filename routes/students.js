@@ -162,11 +162,68 @@ router.get('/api/student-detail/:id', authenticateJWT, (req, res, next) => {
                 result.exams = resExams?.rows || [];
                 db.query(`SELECT * FROM payments WHERE student_id = $1 ORDER BY due_date DESC`, [id], (err, resPayments) => {
                     result.payments = resPayments?.rows || [];
-                    res.json(result);
+                    db.query(`SELECT id, label, url, created_at FROM student_links WHERE student_id = $1 AND academy_id = $2 ORDER BY created_at DESC`, [id, req.user.academy_id], (err, resLinks) => {
+                        result.links = resLinks?.rows || [];
+                        res.json(result);
+                    });
                 });
             });
         });
     });
+});
+
+// ── Student Links CRUD ────────────────────────────────────────────────────────
+
+// Helper: verify student belongs to caller's academy (+ teacher ownership)
+async function verifyStudentAccess(studentId, user) {
+    const q = user.role === 'teacher'
+        ? 'SELECT id FROM students WHERE id = $1 AND academy_id = $2 AND assigned_teacher_id = $3'
+        : 'SELECT id FROM students WHERE id = $1 AND academy_id = $2';
+    const params = user.role === 'teacher'
+        ? [studentId, user.academy_id, user.id]
+        : [studentId, user.academy_id];
+    const r = await db.query(q, params);
+    return (r?.rows?.length > 0);
+}
+
+router.get('/api/students/:id/links', authenticateJWT, async (req, res, next) => {
+    try {
+        const ok = await verifyStudentAccess(req.params.id, req.user);
+        if (!ok) return res.status(403).json({ error: 'Forbidden' });
+        const r = await db.query(
+            'SELECT id, label, url, created_at FROM student_links WHERE student_id = $1 AND academy_id = $2 ORDER BY created_at DESC',
+            [req.params.id, req.user.academy_id]
+        );
+        res.json(r.rows || []);
+    } catch (e) { next(e); }
+});
+
+router.post('/api/students/:id/links', authenticateJWT, async (req, res, next) => {
+    try {
+        const ok = await verifyStudentAccess(req.params.id, req.user);
+        if (!ok) return res.status(403).json({ error: 'Forbidden' });
+        const { label, url } = req.body;
+        if (!label?.trim()) return res.status(400).json({ error: 'El texto del enlace es obligatorio' });
+        if (!url?.trim() || !/^https?:\/\//i.test(url)) return res.status(400).json({ error: 'La URL debe empezar por http:// o https://' });
+        const r = await db.query(
+            'INSERT INTO student_links (student_id, academy_id, label, url) VALUES ($1, $2, $3, $4)',
+            [req.params.id, req.user.academy_id, label.trim(), url.trim()]
+        );
+        res.json({ success: true, id: r.rows?.[0]?.id ?? r.lastID });
+    } catch (e) { next(e); }
+});
+
+router.delete('/api/students/:id/links/:linkId', authenticateJWT, async (req, res, next) => {
+    try {
+        const ok = await verifyStudentAccess(req.params.id, req.user);
+        if (!ok) return res.status(403).json({ error: 'Forbidden' });
+        const r = await db.query(
+            'DELETE FROM student_links WHERE id = $1 AND student_id = $2 AND academy_id = $3',
+            [req.params.linkId, req.params.id, req.user.academy_id]
+        );
+        if (r.rowCount === 0) return res.status(404).json({ error: 'Enlace no encontrado' });
+        res.json({ success: true });
+    } catch (e) { next(e); }
 });
 
 router.get('/api/student/portal-data', authenticateJWT, async (req, res, next) => {
@@ -203,19 +260,21 @@ router.get('/api/student/portal-data', authenticateJWT, async (req, res, next) =
             return res.json(defaultResponse);
         }
 
-        let sessionsR = { rows: [] }, examsR = { rows: [] }, paymentsR = { rows: [] };
+        let sessionsR = { rows: [] }, examsR = { rows: [] }, paymentsR = { rows: [] }, linksR = { rows: [] };
 
         try { sessionsR = await db.query('SELECT * FROM sessions WHERE student_id = $1 ORDER BY date DESC LIMIT 5', [student.id]); } catch(e) { console.error('sessions query error:', e.message); }
         try { examsR = await db.query('SELECT * FROM exams WHERE student_id = $1 ORDER BY date DESC LIMIT 5', [student.id]); } catch(e) { console.error('exams query error:', e.message); }
         try { paymentsR = await db.query('SELECT * FROM payments WHERE student_id = $1 ORDER BY due_date DESC LIMIT 5', [student.id]); } catch(e) { console.error('payments query error:', e.message); }
+        try { linksR = await db.query('SELECT id, label, url FROM student_links WHERE student_id = $1 AND academy_id = $2 ORDER BY created_at DESC', [student.id, req.user.academy_id]); } catch(e) { console.error('links query error:', e.message); }
 
         const sessions = sessionsR.rows || [];
         const exams = examsR.rows || [];
         const payments = paymentsR.rows || [];
+        const links = linksR.rows || [];
 
         res.json({
             student,
-            sessions, exams, payments,
+            sessions, exams, payments, links,
             averageScore: exams.length ? Math.round(exams.reduce((s, e) => s + (e.score || 0), 0) / exams.length * 10) / 10 : 0,
             pendingPayments: payments.filter(p => p.status === 'pending').reduce((s, p) => s + (p.amount || 0), 0),
             homeworkRate: sessions.length ? Math.round(sessions.filter(s => s.homework_done).length / sessions.length * 100) : 0

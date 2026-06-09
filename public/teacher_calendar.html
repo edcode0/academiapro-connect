@@ -723,6 +723,11 @@
                 <textarea id="c_notes" rows="2" placeholder="Ej: Repaso de termodinámica..."
                     style="width:100%;padding:9px 12px;border:0.5px solid #e2e0d8;border-radius:8px;font-size:0.875rem;font-family:inherit;color:#0f172a;outline:none;background:#fff;resize:none;height:72px;box-sizing:border-box;"></textarea>
             </div>
+            <hr style="border:none;border-top:0.5px solid #e2e0d8;margin:0;">
+            <div style="padding:13px 20px; display:flex; align-items:center; gap:10px;">
+                <input type="checkbox" id="c_recurring" style="width:16px;height:16px;cursor:pointer;accent-color:#0f172a;">
+                <label for="c_recurring" style="font-size:0.875rem;color:#0f172a;cursor:pointer;font-weight:500;">🔁 Repetir cada semana (indefinido)</label>
+            </div>
 
             <div style="display:flex;gap:8px;padding:13px 20px;border-top:0.5px solid #e2e0d8;justify-content:flex-end;">
                 <button style="padding:8px 16px;border:0.5px solid #e2e0d8;border-radius:8px;background:#fff;color:#64748b;font-size:0.875rem;cursor:pointer;font-family:inherit;" onclick="closeCreate()">Cancelar</button>
@@ -1197,6 +1202,8 @@
             document.getElementById('createModal').style.display = 'none';
             pendingSelectInfo = null;
             pendingMeetLink = null;
+            const rc = document.getElementById('c_recurring');
+            if (rc) rc.checked = false;
         }
 
         function setSessionTypeSlot(type) {
@@ -1319,8 +1326,30 @@
             const endDatetime = `${dateStr}T${endTime}:00`;
             const durationMins = calcSlotDuration();
 
+            const isRecurring = document.getElementById('c_recurring').checked;
+
             try {
-                // For group: create a slot for each student; for individual: one slot
+                // ── Recurring: one call creates the rule + 8 weeks of slots ──
+                if (isRecurring && studentId && slotSessionType === 'individual') {
+                    const dow = _s.getDay(); // day of week from the selected date
+                    const r = await fetch('/api/calendar/recurring', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({ student_id: studentId, day_of_week: dow, start_time: startTime, duration_minutes: durationMins })
+                    });
+                    if (r.ok) {
+                        showToast('🔁 Sesión recurrente creada — se repetirá cada semana', 'success');
+                    } else {
+                        const err = await r.json();
+                        showToast('❌ ' + (err.error || 'Error al crear la recurrencia'), 'error');
+                    }
+                    calendar.refetchEvents();
+                    closeCreate();
+                    return;
+                }
+
+                // ── Non-recurring: create a slot for each student ──
                 const studentsToProcess = slotSessionType === 'group' && groupStudentIds.length > 0
                     ? groupStudentIds
                     : (studentId ? [studentId] : [null]);

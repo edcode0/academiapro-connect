@@ -1,5 +1,6 @@
 const db = require('./db');
 const { createNotification } = require('./notifications');
+const { generateRecurringSlots } = require('./services/recurring');
 
 function runDailyJobs() {
     const now = new Date();
@@ -48,6 +49,19 @@ function runDailyJobs() {
                 }
             });
         }
+    });
+
+    // 3. RECURRING SESSIONS — maintain 8-week rolling horizon
+    db.query('SELECT * FROM recurring_sessions WHERE active = TRUE', [], async (err, rRes) => {
+        if (err || !rRes?.rows?.length) return;
+        for (const rule of rRes.rows) {
+            try {
+                await generateRecurringSlots(rule, 8);
+            } catch (e) {
+                console.error('[Recurring] Cron error for rule', rule.id, ':', e.message);
+            }
+        }
+        console.log(`[Recurring] Cron: processed ${rRes.rows.length} rule(s)`);
     });
 
     // 2. TEACHER REPORT NOTIFICATION TO ADMIN ON 1ST OF MONTH

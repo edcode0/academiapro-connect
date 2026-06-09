@@ -401,6 +401,7 @@
             <div class="tab" onclick="switchTab('exams-content')">📝 Exámenes</div>
             <div class="tab" onclick="switchTab('simulacros-content')">📋 Simulacros</div>
             <div class="tab" onclick="switchTab('payments')">💳 Pagos</div>
+            <div class="tab" onclick="switchTab('links-content')">🔗 Enlaces</div>
         </div>
 
         <div id="sessions-content" class="tab-content active">
@@ -481,6 +482,26 @@
                     style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem;">
                     <p style="color: var(--text-muted); font-size: 0.875rem;">No hay informes disponibles todavía.</p>
                 </div>
+            </div>
+        </div>
+
+        <div id="links-content" class="tab-content">
+            <div class="card" style="margin-bottom: 2rem;">
+                <h3 style="margin-bottom: 1.5rem; color: var(--text-main); font-size: 1.125rem;">Añadir enlace</h3>
+                <form id="linkForm" style="display: grid; grid-template-columns: 1fr 2fr auto; gap: 1rem; align-items: end;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label>Texto del enlace</label>
+                        <input type="text" id="link-label" placeholder="Ej: Apuntes de Matemáticas" required>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label>URL</label>
+                        <input type="url" id="link-url" placeholder="https://..." required>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="height: 48px; margin-bottom: 0;">+ Añadir</button>
+                </form>
+            </div>
+            <div class="card">
+                <div id="links-list"></div>
             </div>
         </div>
 
@@ -644,7 +665,56 @@
             loadSessions(data.sessions);
             loadExams(data.exams);
             loadSimulacros();
+            renderLinks(data.links || []);
         }
+
+        function escapeHtml(str) {
+            return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+
+        function renderLinks(links) {
+            const container = document.getElementById('links-list');
+            if (!links.length) {
+                container.innerHTML = '<p style="color:var(--text-muted); font-size:0.875rem;">No hay enlaces guardados todavía.</p>';
+                return;
+            }
+            container.innerHTML = links.map(l => `
+                <div style="display:flex; align-items:center; justify-content:space-between; padding:0.75rem 0; border-bottom:1px solid var(--border);">
+                    <a href="${escapeHtml(l.url)}" target="_blank" rel="noopener" style="color:#2563eb; font-weight:500; text-decoration:underline;">${escapeHtml(l.label)}</a>
+                    <button onclick="deleteLink(${l.id})" style="background:none; border:none; cursor:pointer; color:var(--text-muted); font-size:1.1rem; padding:0 0.5rem;" title="Borrar enlace">🗑</button>
+                </div>
+            `).join('');
+        }
+
+        async function loadLinks() {
+            const r = await fetch(`/api/students/${studentId}/links`, { credentials: 'include' });
+            if (r.ok) renderLinks(await r.json());
+        }
+
+        async function deleteLink(linkId) {
+            if (!confirm('¿Borrar este enlace?')) return;
+            const r = await fetch(`/api/students/${studentId}/links/${linkId}`, { method: 'DELETE', credentials: 'include' });
+            if (r.ok) loadLinks();
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('linkForm')?.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const label = document.getElementById('link-label').value.trim();
+                const url = document.getElementById('link-url').value.trim();
+                const r = await fetch(`/api/students/${studentId}/links`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ label, url })
+                });
+                if (r.ok) {
+                    document.getElementById('link-label').value = '';
+                    document.getElementById('link-url').value = '';
+                    loadLinks();
+                }
+            });
+        });
 
         function loadSessions(sessions) {
             document.getElementById('sessions-table').innerHTML = sessions.map(s => `

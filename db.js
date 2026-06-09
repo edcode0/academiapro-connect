@@ -531,7 +531,33 @@ async function initDb() {
     "ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS pending_match BOOLEAN DEFAULT FALSE",
 
     // Transcripts: unique index on gmail_msg_id per academy
-    "CREATE UNIQUE INDEX IF NOT EXISTS idx_transcripts_gmail_msg ON transcripts(academy_id, gmail_msg_id) WHERE gmail_msg_id IS NOT NULL"
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_transcripts_gmail_msg ON transcripts(academy_id, gmail_msg_id) WHERE gmail_msg_id IS NOT NULL",
+
+    // Student links — persistent URLs per student, visible to student
+    `CREATE TABLE IF NOT EXISTS student_links (
+      id ${idType},
+      student_id INTEGER NOT NULL,
+      academy_id INTEGER NOT NULL,
+      label TEXT NOT NULL,
+      url TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+
+    // Recurring session rules — each row represents a weekly pattern
+    `CREATE TABLE IF NOT EXISTS recurring_sessions (
+      id ${idType},
+      academy_id INTEGER NOT NULL,
+      teacher_id INTEGER NOT NULL,
+      student_id INTEGER NOT NULL,
+      day_of_week INTEGER NOT NULL,
+      start_time TEXT NOT NULL,
+      duration_minutes INTEGER NOT NULL DEFAULT 60,
+      active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+
+    // Link generated slots back to their recurrence rule
+    "ALTER TABLE available_slots ADD COLUMN IF NOT EXISTS recurrence_rule_id INTEGER"
   ];
 
   for (const sql of migrations) {
@@ -594,7 +620,16 @@ async function initDb() {
 
     // room_members
     'CREATE INDEX IF NOT EXISTS idx_room_members_room_id ON room_members(room_id)',
-    'CREATE INDEX IF NOT EXISTS idx_room_members_user_id ON room_members(user_id)'
+    'CREATE INDEX IF NOT EXISTS idx_room_members_user_id ON room_members(user_id)',
+
+    // student_links
+    'CREATE INDEX IF NOT EXISTS idx_student_links_student_id ON student_links(student_id)',
+    'CREATE INDEX IF NOT EXISTS idx_student_links_academy_id ON student_links(academy_id)',
+
+    // recurring_sessions
+    'CREATE INDEX IF NOT EXISTS idx_recurring_sessions_academy_id ON recurring_sessions(academy_id)',
+    'CREATE INDEX IF NOT EXISTS idx_recurring_sessions_teacher_id ON recurring_sessions(teacher_id)',
+    'CREATE INDEX IF NOT EXISTS idx_recurring_sessions_active ON recurring_sessions(active)'
   ];
   for (const sql of indexMigrations) {
     try { await db.query(sql); } catch (e) { /* index may already exist */ }

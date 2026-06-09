@@ -90,6 +90,29 @@ module.exports = function makeGmailService(io) {
                     return '';
                 }
 
+                // Extract recording link from HTML before stripping tags
+                function extractRecordingLink(payload) {
+                    const getHtml = (p) => {
+                        if (p.mimeType === 'text/html' && p.body?.data)
+                            return Buffer.from(p.body.data, 'base64').toString('utf-8');
+                        if (p.parts) { for (const c of p.parts) { const h = getHtml(c); if (h) return h; } }
+                        return '';
+                    };
+                    const html = getHtml(payload);
+                    if (!html) return null;
+                    // Match Drive/Meet recording links inside href attributes
+                    const patterns = [
+                        /href="(https:\/\/drive\.google\.com\/[^"]+)"/i,
+                        /href="(https:\/\/meet\.google\.com\/recording\/[^"]+)"/i,
+                    ];
+                    for (const re of patterns) {
+                        const m = html.match(re);
+                        if (m?.[1]) return m[1];
+                    }
+                    return null;
+                }
+
+                const recordingLink = extractRecordingLink(email.data.payload);
                 const body = extractText(email.data.payload);
                 if (!body || body.length < 100) {
                     console.warn(`[Gmail] Skipping email ${msg.id}: body too short (${body?.length || 0} chars)`);
@@ -208,7 +231,8 @@ module.exports = function makeGmailService(io) {
                     `📝 *Deberes:*\n${(d.deberes || d.homework || []).map(x => '• ' + x).join('\n') || '• Sin deberes'}\n\n` +
                     `💡 *Conceptos:*\n${(d.conceptos_clave || d.topics_covered || []).map(x => '• ' + x).join('\n')}\n\n` +
                     `🎯 *Consejos:*\n${(d.pistas_profesor || d.key_points || []).map(x => '• ' + x).join('\n')}\n\n` +
-                    `💪 ${d.mensaje_motivador || d.teacher_notes || ''}`;
+                    `💪 ${d.mensaje_motivador || d.teacher_notes || ''}` +
+                    (recordingLink ? `\n\n🎥 *Grabación de la clase:*\n${recordingLink}` : '');
 
                 await db.query(
                     isPostgres

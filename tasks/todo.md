@@ -1,4 +1,22 @@
-# tasks/todo.md - Estado actual (verificado 2026-05-02)
+# tasks/todo.md - Estado actual (verificado 2026-06-09)
+
+---
+
+## SPRINT 2026-06-09 — 3 Features ✅ COMPLETO
+
+| Feature | Estado | Archivos |
+|---------|--------|---------|
+| F1 - Enlaces por alumno | ✅ | db.js, routes/students.js, student_profile.html, teacher_student_profile.html, student_portal.html |
+| F2 - Enlace grabación en transcripción | ✅ | services/gmail.js |
+| F3 - Sesiones recurrentes semanales | ✅ | db.js, services/recurring.js, routes/calendar.js, cron.js, teacher_calendar.html |
+
+**F1 — Links:** Tabla `student_links`. CRUD `/api/students/:id/links`. Tab "🔗 Enlaces" en perfil admin + teacher. Solo lectura en portal alumno. Validación URL http/https, escape XSS.
+
+**F2 — Grabación:** `extractRecordingLink()` en gmail.js extrae URL de Drive de HTML del email antes de limpiarlo. Concatena `🎥 Grabación de la clase:` al final del mensaje. Fallback silencioso si no hay URL.
+
+**F3 — Recurrencia:** Tabla `recurring_sessions` (regla). `services/recurring.js` (helper idempotente). `/api/calendar/recurring` POST/GET/DELETE. Cron diario mantiene horizonte rodante 8 semanas. Checkbox "🔁 Repetir" en modal de calendario. Meet nuevo por sesión (si OAuth conectado).
+
+---
 
 ---
 

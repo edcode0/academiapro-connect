@@ -529,6 +529,13 @@
             </div>
         </div>
 
+        <div class="card" style="margin-top: 1.5rem;" id="links-card" style="display:none;">
+            <h4>🔗 Recursos y enlaces</h4>
+            <div id="student-links-list" style="margin-top: 1rem;">
+                <p style="color: #64748b; font-size: 0.875rem;">No hay recursos disponibles todavía.</p>
+            </div>
+        </div>
+
         <div class="danger-zone"
             style="margin-top: 2rem; border: 1px solid #fee2e2; border-radius: 12px; padding: 1.5rem; background: #fff5f5;">
             <h3 style="color: #dc2626; margin-bottom: 0.5rem;">⚠️ Zona de peligro</h3>
@@ -691,6 +698,19 @@
                             </div>`;
                         }).join('');
                     }
+                }
+
+                // Links (recursos del profe)
+                if (data.links?.length) {
+                    document.getElementById('links-card').style.display = '';
+                    document.getElementById('student-links-list').innerHTML = data.links.map(l => `
+                        <div style="padding:0.6rem 0; border-bottom:1px solid #e2e8f0;">
+                            <a href="${l.url.replace(/"/g,'&quot;')}" target="_blank" rel="noopener"
+                               style="color:#2563eb; font-weight:500; text-decoration:underline;">
+                                ${l.label.replace(/</g,'&lt;')}
+                            </a>
+                        </div>
+                    `).join('');
                 }
 
                 // Get user code

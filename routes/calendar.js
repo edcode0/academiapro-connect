@@ -382,4 +382,68 @@ router.get('/api/calendar/status', authenticateJWT, async (req, res, next) => {
     }
 });
 
+// ── Recurring sessions ────────────────────────────────────────────────────────
+const { generateRecurringSlots } = require('../services/recurring');
+
+// Create a recurring rule + materialise next 8 weeks immediately
+router.post('/api/calendar/recurring', authenticateJWT, requireTeacherOrAdmin, async (req, res, next) => {
+    try {
+        const { student_id, day_of_week, start_time, duration_minutes } = req.body;
+        if (!student_id || day_of_week == null || !start_time) {
+            return res.status(400).json({ error: 'Faltan campos: student_id, day_of_week, start_time' });
+        }
+        // Verify student belongs to caller's academy (teacher must own the student)
+        const ownership = req.user.role === 'teacher'
+            ? await db.query('SELECT id FROM students WHERE id=$1 AND academy_id=$2 AND assigned_teacher_id=$3', [student_id, req.user.academy_id, req.user.id])
+            : await db.query('SELECT id FROM students WHERE id=$1 AND academy_id=$2', [student_id, req.user.academy_id]);
+        if (!ownership.rows?.length) return res.status(403).json({ error: 'Alumno no encontrado o sin permiso' });
+
+        const dow = parseInt(day_of_week, 10);
+        const dur = parseInt(duration_minutes, 10) || 60;
+        const insertSql = isPostgres
+            ? 'INSERT INTO recurring_sessions (academy_id, teacher_id, student_id, day_of_week, start_time, duration_minutes) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id'
+            : 'INSERT INTO recurring_sessions (academy_id, teacher_id, student_id, day_of_week, start_time, duration_minutes) VALUES ($1,$2,$3,$4,$5,$6)';
+        const r = await db.query(insertSql, [req.user.academy_id, req.user.id, student_id, dow, start_time, dur]);
+        const ruleId = isPostgres ? r.rows[0].id : r.lastID;
+
+        const rule = { id: ruleId, academy_id: req.user.academy_id, teacher_id: req.user.id, student_id, day_of_week: dow, start_time, duration_minutes: dur };
+        await generateRecurringSlots(rule, 8);
+
+        res.json({ success: true, rule_id: ruleId });
+    } catch (err) { next(err); }
+});
+
+// List active recurring rules for the caller
+router.get('/api/calendar/recurring', authenticateJWT, requireTeacherOrAdmin, async (req, res, next) => {
+    try {
+        const sql = req.user.role === 'teacher'
+            ? 'SELECT r.*, s.name as student_name FROM recurring_sessions r JOIN students s ON r.student_id=s.id WHERE r.academy_id=$1 AND r.teacher_id=$2 AND r.active=TRUE ORDER BY r.day_of_week, r.start_time'
+            : 'SELECT r.*, s.name as student_name FROM recurring_sessions r JOIN students s ON r.student_id=s.id WHERE r.academy_id=$1 AND r.active=TRUE ORDER BY r.day_of_week, r.start_time';
+        const params = req.user.role === 'teacher' ? [req.user.academy_id, req.user.id] : [req.user.academy_id];
+        const result = await db.query(sql, params);
+        res.json(result.rows || []);
+    } catch (err) { next(err); }
+});
+
+// Cancel a recurring rule: deactivate + remove future unbooked slots
+router.delete('/api/calendar/recurring/:id', authenticateJWT, requireTeacherOrAdmin, async (req, res, next) => {
+    try {
+        const ownership = req.user.role === 'teacher'
+            ? await db.query('SELECT id FROM recurring_sessions WHERE id=$1 AND academy_id=$2 AND teacher_id=$3', [req.params.id, req.user.academy_id, req.user.id])
+            : await db.query('SELECT id FROM recurring_sessions WHERE id=$1 AND academy_id=$2', [req.params.id, req.user.academy_id]);
+        if (!ownership.rows?.length) return res.status(404).json({ error: 'Regla no encontrada' });
+
+        await db.query('UPDATE recurring_sessions SET active=FALSE WHERE id=$1', [req.params.id]);
+
+        // Delete future unbooked slots linked to this rule (already-booked slots are kept)
+        const nowStr = new Date().toISOString().slice(0, 19);
+        await db.query(
+            'DELETE FROM available_slots WHERE recurrence_rule_id=$1 AND is_booked=FALSE AND start_datetime>$2',
+            [req.params.id, nowStr]
+        );
+
+        res.json({ success: true });
+    } catch (err) { next(err); }
+});
+
 module.exports = router;
