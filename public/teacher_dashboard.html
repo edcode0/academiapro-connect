@@ -647,7 +647,7 @@
             } catch (e) { /* unread count is non-critical */ }
 
             try {
-                const statsRes = await fetch('/api/teacher/dashboard-stats', { headers });
+                const statsRes = await fetch('/api/teacher/dashboard-stats', { credentials: 'include' });
                 if (!statsRes.ok) throw new Error('Error al cargar estadísticas');
                 const stats = await statsRes.json();
                 document.getElementById('stat-students').textContent = stats.studentCount ?? '—';
@@ -676,7 +676,7 @@
             }
 
             try {
-                const studentsRes = await fetch('/api/teacher/students', { headers });
+                const studentsRes = await fetch('/api/teacher/students', { credentials: 'include' });
                 if (!studentsRes.ok) throw new Error('Error al cargar alumnos');
                 const students = await studentsRes.json();
                 document.getElementById('students-table').innerHTML = students.length
@@ -779,10 +779,10 @@
         // --- End Session Modal Logic ---
 
         init();
-        initNotifications();
     </script>
 <script src="/notifications.js"></script>
 <script src="/help-assistant.js"></script>
+<script>initNotifications();</script>
 
     <div class="mobile-nav-overlay" id="mobile-nav-overlay" onclick="closeMobileNav()"></div>
 </body>
