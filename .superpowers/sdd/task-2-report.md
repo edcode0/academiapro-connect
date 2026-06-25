@@ -137,3 +137,49 @@ homework-reminders tests passed
 
 - Reminder CTA creation still only happens when normalized homework items remain after trimming, so blank entries do not generate a second message.
 - History resend now preserves transcript linkage by explicitly injecting `transcript_id` into the client-side summary payload before `send-to-chat`.
+
+---
+
+## Follow-up fix pass
+
+### What I fixed
+
+- Wrapped transcript history JSON parsing in `public/transcripts.html` so one malformed or legacy `processed_json` row degrades safely instead of breaking the whole history resend UI.
+- Added `safeParseProcessedJson(rawJson)` and `buildHistorySummaryPayload(row)` in `public/transcripts.html` and used them in `loadHistory()`.
+- Reworked `tests/homework-reminders.js` into focused mocked behavior coverage instead of helper-only assertions.
+- Added focused coverage for:
+  - manual transcript flow: no second CTA when homework is empty after cleaning
+  - manual transcript flow: second CTA appears and transcript linkage is preserved when cleaned homework exists
+  - history/resend payload shaping: malformed rows are tolerated and `transcript_id` is preserved
+  - Gmail transcript flow: reminder creation and second CTA message use the same path when homework exists
+- Suppressed dotenv/bootstrap and Gmail processing noise in the focused test output so the command stays readable.
+
+### Follow-up fix tests and results
+
+1. Covering test run:
+   - Command: `node tests/homework-reminders.js`
+   - Result: PASS
+   - Output:
+
+```text
+homework-reminders tests passed
+```
+
+2. Syntax verification:
+   - Command: `node --check services/homework-reminders.js`
+   - Result: PASS
+   - Command: `node --check routes/transcripts.js`
+   - Result: PASS
+   - Command: `node --check services/gmail.js`
+   - Result: PASS
+
+### Files updated in follow-up fix pass
+
+- `public/transcripts.html`
+- `tests/homework-reminders.js`
+
+### Follow-up self-review findings
+
+- The primary transcript message remains unchanged in both manual and Gmail flows; only the second CTA reminder message is additive.
+- The history resend UI now keeps working even if an older `processed_json` row cannot be parsed.
+- The focused test file now exercises task-critical flow behavior with mocked `db` and `io`, not just pure helper functions.

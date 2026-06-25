@@ -1,36 +1,478 @@
 'use strict';
 
 const assert = require('assert');
-const {
-    normalizeHomeworkList,
-    computeNextScheduledFor,
-    canScheduleReminder,
-    shouldCreateReminderFromProcessed,
-    getTranscriptIdForReminder
-} = require('../services/homework-reminders');
+const fs = require('fs');
+const path = require('path');
+const vm = require('vm');
+const Module = require('module');
 
-function run() {
+const ROOT = path.resolve(__dirname, '..');
+const SERVICE_PATH = path.join(ROOT, 'services/homework-reminders.js');
+const ROUTES_PATH = path.join(ROOT, 'routes/transcripts.js');
+const GMAIL_PATH = path.join(ROOT, 'services/gmail.js');
+const HTML_PATH = path.join(ROOT, 'public/transcripts.html');
+const QUIET_LOG_PREFIXES = ['[dotenv@', 'Using PostgreSQL', '[Gmail] '];
+
+function purgeModules(pathsToPurge) {
+    for (const targetPath of pathsToPurge) {
+        try {
+            delete require.cache[require.resolve(targetPath)];
+        } catch (_) {
+            // Ignore modules that have not been loaded yet.
+        }
+    }
+}
+
+function loadWithMocks(targetPath, mocks) {
+    purgeModules([targetPath]);
+    const originalLoad = Module._load;
+    Module._load = function patchedLoad(request, parent, isMain) {
+        if (Object.prototype.hasOwnProperty.call(mocks, request)) {
+            return mocks[request];
+        }
+        return originalLoad.call(this, request, parent, isMain);
+    };
+
+    try {
+        return require(targetPath);
+    } finally {
+        Module._load = originalLoad;
+    }
+}
+
+function createMockDb(overrides = {}) {
+    const state = {
+        messageInserts: [],
+        reminderInserts: [],
+        transcriptInserts: [],
+        roomMemberInserts: [],
+        roomInserts: [],
+        updates: []
+    };
+
+    const db = {
+        isPostgres: true,
+        state,
+        async query(sql, params = []) {
+            if (overrides.query) return overrides.query(sql, params, state);
+
+            if (sql.includes("SELECT id FROM users WHERE id = $1 AND role = 'student'")) return { rows: [] };
+            if (sql.includes('SELECT user_id FROM students WHERE id = $1')) return { rows: [{ user_id: 55 }] };
+            if (sql.includes("SELECT id FROM students WHERE user_id = $1")) return { rows: [{ id: 12 }] };
+            if (sql.includes('SELECT r.id FROM rooms r')) return { rows: [{ id: 91 }] };
+            if (sql.includes('INSERT INTO room_members')) {
+                state.roomMemberInserts.push(params);
+                return { rows: [], rowCount: 1 };
+            }
+            if (sql.includes("INSERT INTO rooms (academy_id, type, name, created_at)")) {
+                state.roomInserts.push(params);
+                return { rows: [{ id: 91 }], lastID: 91 };
+            }
+            if (sql.includes('INSERT INTO messages')) {
+                state.messageInserts.push(params);
+                return { rows: [], rowCount: 1 };
+            }
+            if (sql.includes('INSERT INTO homework_reminders')) {
+                state.reminderInserts.push(params);
+                return { rows: [{ id: 500 }], lastID: 500 };
+            }
+            if (sql.includes('SELECT name FROM users WHERE id = $1')) return { rows: [{ name: 'Profesora Ada' }] };
+            if (sql.includes('INSERT INTO transcripts')) {
+                state.transcriptInserts.push(params);
+                return { rows: [{ id: 700 }], lastID: 700 };
+            }
+            if (sql.includes('UPDATE users SET gmail_last_check')) {
+                state.updates.push({ sql, params });
+                return { rows: [], rowCount: 1 };
+            }
+
+            throw new Error(`Unexpected SQL in test: ${sql}`);
+        }
+    };
+
+    return db;
+}
+
+function createRouterHarness() {
+    const routes = { get: new Map(), post: new Map(), put: new Map() };
+    return {
+        express: {
+            Router() {
+                return {
+                    get(routePath, ...handlers) {
+                        routes.get.set(routePath, handlers[handlers.length - 1]);
+                    },
+                    post(routePath, ...handlers) {
+                        routes.post.set(routePath, handlers[handlers.length - 1]);
+                    },
+                    put(routePath, ...handlers) {
+                        routes.put.set(routePath, handlers[handlers.length - 1]);
+                    }
+                };
+            }
+        },
+        routes
+    };
+}
+
+function createIoMock() {
+    const emits = [];
+    return {
+        emits,
+        to(room) {
+            return {
+                emit(event, payload) {
+                    emits.push({ room, event, payload });
+                }
+            };
+        }
+    };
+}
+
+function createRes() {
+    return {
+        statusCode: 200,
+        payload: null,
+        status(code) {
+            this.statusCode = code;
+            return this;
+        },
+        json(payload) {
+            this.payload = payload;
+            return this;
+        }
+    };
+}
+
+function createNoopMiddleware() {
+    return (req, res, next) => next && next();
+}
+
+function extractFunctionSource(source, functionName) {
+    const marker = `function ${functionName}`;
+    const start = source.indexOf(marker);
+    if (start === -1) throw new Error(`Function ${functionName} not found`);
+
+    let braceDepth = 0;
+    let seenBrace = false;
+    for (let i = start; i < source.length; i++) {
+        const char = source[i];
+        if (char === '{') {
+            braceDepth++;
+            seenBrace = true;
+        } else if (char === '}') {
+            braceDepth--;
+            if (seenBrace && braceDepth === 0) {
+                return source.slice(start, i + 1);
+            }
+        }
+    }
+
+    throw new Error(`Function ${functionName} did not terminate`);
+}
+
+function loadHtmlHelpers() {
+    const html = fs.readFileSync(HTML_PATH, 'utf8');
+    const script = [
+        extractFunctionSource(html, 'safeParseProcessedJson'),
+        extractFunctionSource(html, 'buildHistorySummaryPayload')
+    ].join('\n');
+    const context = {};
+    vm.createContext(context);
+    vm.runInContext(script, context);
+    return context;
+}
+
+function loadHomeworkReminderService(dbMock) {
+    purgeModules([SERVICE_PATH]);
+    return loadWithMocks(SERVICE_PATH, {
+        '../db': dbMock
+    });
+}
+
+async function testServiceHelpers() {
+    const dbMock = createMockDb();
+    const service = loadHomeworkReminderService(dbMock);
+
     assert.deepStrictEqual(
-        normalizeHomeworkList(['  Ruffini  ', '', 'Ruffini', 'polinomios']),
+        service.normalizeHomeworkList(['  Ruffini  ', '', 'Ruffini', 'polinomios']),
         ['Ruffini', 'polinomios']
     );
 
-    const next = computeNextScheduledFor('wednesday', '18:30', new Date('2026-06-23T10:00:00Z'));
+    const next = service.computeNextScheduledFor('wednesday', '18:30', new Date('2026-06-23T10:00:00Z'));
     assert.ok(next instanceof Date);
-    assert.strictEqual(canScheduleReminder({ status: 'pending_schedule' }), true);
-    assert.strictEqual(canScheduleReminder({ status: 'done' }), false);
-    assert.strictEqual(shouldCreateReminderFromProcessed({ deberes: [] }), false);
-    assert.strictEqual(
-        shouldCreateReminderFromProcessed({ deberes: ['   ', '\n'] }),
-        false
-    );
-    assert.strictEqual(
-        shouldCreateReminderFromProcessed({ deberes: ['repasar matrices'] }),
-        true
-    );
-    assert.strictEqual(getTranscriptIdForReminder({ transcript_id: 42 }), 42);
-    assert.strictEqual(getTranscriptIdForReminder({}, 17), 17);
+    assert.strictEqual(service.canScheduleReminder({ status: 'pending_schedule' }), true);
+    assert.strictEqual(service.canScheduleReminder({ status: 'done' }), false);
+    assert.strictEqual(service.shouldCreateReminderFromProcessed({ deberes: [] }), false);
+    assert.strictEqual(service.shouldCreateReminderFromProcessed({ deberes: ['   ', '\n'] }), false);
+    assert.strictEqual(service.shouldCreateReminderFromProcessed({ deberes: ['repasar matrices'] }), true);
+    assert.strictEqual(service.getTranscriptIdForReminder({ transcript_id: 42 }), 42);
+    assert.strictEqual(service.getTranscriptIdForReminder({}, 17), 17);
 }
 
-run();
-console.log('homework-reminders tests passed');
+async function testManualFlowSkipsSecondMessageWithoutCleanHomework() {
+    const dbMock = createMockDb();
+    const homeworkService = loadHomeworkReminderService(dbMock);
+    const io = createIoMock();
+    const routerHarness = createRouterHarness();
+
+    purgeModules([ROUTES_PATH]);
+    const makeRouter = loadWithMocks(ROUTES_PATH, {
+        express: routerHarness.express,
+        '../db': dbMock,
+        '../services/gmail': () => () => ({ checkAndProcessTranscripts: async () => 0 }),
+        '../services/homework-reminders': homeworkService,
+        '../middleware/auth': { authenticateJWT: createNoopMiddleware() },
+        '../middleware/roles': {
+            requireAdmin: createNoopMiddleware(),
+            requireTeacherOrAdmin: createNoopMiddleware()
+        },
+        '../notifications': { createNotification() {} },
+        '../utils/multer': { pdfUpload: { single: () => createNoopMiddleware() } },
+        '../services/groq': {},
+        '../services/calendar': { makeOAuth2Client() { return {}; } },
+        googleapis: { google: {} }
+    });
+
+    makeRouter(io);
+    const handler = routerHarness.routes.post.get('/api/transcripts/send-to-chat');
+    const req = {
+        user: { id: 7, academy_id: 3, role: 'teacher' },
+        body: {
+            student_id: 12,
+            summary: {
+                resumen: 'Buen trabajo hoy',
+                deberes: ['   ', '\n'],
+                conceptos_clave: ['Matrices'],
+                pistas_profesor: ['Repasa el signo'],
+                mensaje_motivador: 'Sigue asi'
+            }
+        }
+    };
+    const res = createRes();
+
+    await handler(req, res, err => { throw err; });
+
+    assert.strictEqual(res.statusCode, 200);
+    assert.strictEqual(dbMock.state.messageInserts.length, 1);
+    assert.strictEqual(dbMock.state.reminderInserts.length, 0);
+    assert.strictEqual(io.emits.length, 1);
+    assert.ok(dbMock.state.messageInserts[0][2].startsWith('📚 *Resumen de tu clase de hoy*'));
+}
+
+async function testManualFlowAddsSecondMessageAndPreservesTranscriptId() {
+    const dbMock = createMockDb();
+    const homeworkService = loadHomeworkReminderService(dbMock);
+    const io = createIoMock();
+    const routerHarness = createRouterHarness();
+
+    purgeModules([ROUTES_PATH]);
+    const makeRouter = loadWithMocks(ROUTES_PATH, {
+        express: routerHarness.express,
+        '../db': dbMock,
+        '../services/gmail': () => () => ({ checkAndProcessTranscripts: async () => 0 }),
+        '../services/homework-reminders': homeworkService,
+        '../middleware/auth': { authenticateJWT: createNoopMiddleware() },
+        '../middleware/roles': {
+            requireAdmin: createNoopMiddleware(),
+            requireTeacherOrAdmin: createNoopMiddleware()
+        },
+        '../notifications': { createNotification() {} },
+        '../utils/multer': { pdfUpload: { single: () => createNoopMiddleware() } },
+        '../services/groq': {},
+        '../services/calendar': { makeOAuth2Client() { return {}; } },
+        googleapis: { google: {} }
+    });
+
+    makeRouter(io);
+    const handler = routerHarness.routes.post.get('/api/transcripts/send-to-chat');
+    const req = {
+        user: { id: 7, academy_id: 3, role: 'teacher' },
+        body: {
+            student_id: 12,
+            summary: {
+                transcript_id: 77,
+                resumen: 'Clase de algebra lineal',
+                deberes: ['  repasar matrices  ', ''],
+                conceptos_clave: ['Matrices'],
+                pistas_profesor: ['Ordena los pasos'],
+                mensaje_motivador: 'Vas muy bien'
+            }
+        }
+    };
+    const res = createRes();
+
+    await handler(req, res, err => { throw err; });
+
+    assert.strictEqual(res.statusCode, 200);
+    assert.strictEqual(dbMock.state.messageInserts.length, 2);
+    assert.strictEqual(dbMock.state.reminderInserts.length, 1);
+    assert.strictEqual(dbMock.state.reminderInserts[0][3], 77);
+    assert.ok(dbMock.state.messageInserts[1][2].includes('/student-portal?homeworkReminder=500'));
+    assert.strictEqual(io.emits.length, 2);
+}
+
+function testHistoryShapingPreservesTranscriptLinkage() {
+    const { safeParseProcessedJson, buildHistorySummaryPayload } = loadHtmlHelpers();
+
+    const safeFallback = safeParseProcessedJson('{bad json');
+    assert.strictEqual(JSON.stringify(safeFallback), '{}');
+
+    const malformedRowPayload = buildHistorySummaryPayload({
+        id: 33,
+        transcript_id: 44,
+        processed_json: '{broken'
+    });
+    assert.strictEqual(malformedRowPayload.transcript_id, 44);
+
+    const historyPayload = buildHistorySummaryPayload({
+        id: 10,
+        transcript_id: 11,
+        processed_json: JSON.stringify({ resumen: 'Resumen guardado' })
+    });
+    assert.strictEqual(historyPayload.resumen, 'Resumen guardado');
+    assert.strictEqual(historyPayload.transcript_id, 11);
+}
+
+async function testGmailFlowAddsSecondMessageWhenHomeworkExists() {
+    const dbMock = createMockDb({
+        query(sql, params, state) {
+            if (sql.includes('SELECT id FROM transcripts WHERE gmail_msg_id = $1')) return { rows: [] };
+            if (sql.includes('SELECT s.id, s.name, s.user_id FROM students s WHERE s.academy_id = $1 AND s.assigned_teacher_id = $2')) {
+                return { rows: [{ id: 12, name: 'Ana', user_id: 55 }] };
+            }
+            if (sql.includes('SELECT r.id FROM rooms r')) return { rows: [{ id: 91 }] };
+            if (sql.includes('INSERT INTO messages')) {
+                state.messageInserts.push(params);
+                return { rows: [], rowCount: 1 };
+            }
+            if (sql.includes('INSERT INTO transcripts')) {
+                state.transcriptInserts.push(params);
+                return { rows: [{ id: 700 }], lastID: 700 };
+            }
+            if (sql.includes('INSERT INTO homework_reminders')) {
+                state.reminderInserts.push(params);
+                return { rows: [{ id: 900 }], lastID: 900 };
+            }
+            if (sql.includes('UPDATE users SET gmail_last_check')) {
+                state.updates.push({ sql, params });
+                return { rows: [], rowCount: 1 };
+            }
+
+            throw new Error(`Unexpected SQL in gmail test: ${sql}`);
+        }
+    });
+    const homeworkService = loadHomeworkReminderService(dbMock);
+    const io = createIoMock();
+
+    const oauthClient = {
+        setCredentials() {},
+        on() {}
+    };
+    const gmailApi = {
+        users: {
+            messages: {
+                async list() {
+                    return { data: { messages: [{ id: 'msg-1' }] } };
+                },
+                async get() {
+                    return {
+                        data: {
+                            internalDate: String(new Date('2026-06-25T10:00:00Z').getTime()),
+                            payload: {
+                                mimeType: 'text/plain',
+                                body: {
+                                    data: Buffer.from('A'.repeat(150)).toString('base64')
+                                }
+                            }
+                        }
+                    };
+                },
+                async modify() {
+                    return { data: {} };
+                }
+            }
+        }
+    };
+    const groqMock = {
+        chat: {
+            completions: {
+                async create() {
+                    return {
+                        choices: [{
+                            message: {
+                                content: JSON.stringify({
+                                    student_name: 'Ana',
+                                    resumen: 'Resumen Gmail',
+                                    deberes: ['  hacer ejercicios  ', ''],
+                                    conceptos_clave: ['Matrices'],
+                                    pistas_profesor: ['Revisar signos'],
+                                    mensaje_motivador: 'Buen progreso'
+                                })
+                            }
+                        }]
+                    };
+                }
+            }
+        }
+    };
+
+    purgeModules([GMAIL_PATH]);
+    const makeGmailService = loadWithMocks(GMAIL_PATH, {
+        '../db': dbMock,
+        './groq': groqMock,
+        './homework-reminders': homeworkService,
+        '../notifications': { createNotification() {} },
+        './calendar': { makeOAuth2Client() { return oauthClient; } },
+        googleapis: { google: { gmail() { return gmailApi; } } }
+    });
+
+    const gmailService = makeGmailService(io);
+    const processed = await gmailService.checkAndProcessTranscripts({
+        id: 7,
+        name: 'Profesora Ada',
+        role: 'teacher',
+        academy_id: 3,
+        gmail_access_token: 'token',
+        gmail_refresh_token: 'refresh',
+        gmail_token_expiry: Date.now(),
+        gmail_last_check: null,
+        transcript_email: null
+    });
+
+    assert.strictEqual(processed, 1);
+    assert.strictEqual(dbMock.state.transcriptInserts.length, 1);
+    assert.strictEqual(dbMock.state.reminderInserts.length, 1);
+    assert.strictEqual(dbMock.state.reminderInserts[0][3], 700);
+    assert.strictEqual(dbMock.state.messageInserts.length, 2);
+    assert.ok(dbMock.state.messageInserts[1][3].includes('/student-portal?homeworkReminder=900'));
+    assert.strictEqual(io.emits.length, 2);
+}
+
+async function run() {
+    const originalLog = console.log;
+    console.log = (...args) => {
+        const message = args.join(' ');
+        if (QUIET_LOG_PREFIXES.some(prefix => message.startsWith(prefix))) return;
+        originalLog(...args);
+    };
+
+    try {
+        await testServiceHelpers();
+        await testManualFlowSkipsSecondMessageWithoutCleanHomework();
+        await testManualFlowAddsSecondMessageAndPreservesTranscriptId();
+        testHistoryShapingPreservesTranscriptLinkage();
+        await testGmailFlowAddsSecondMessageWhenHomeworkExists();
+    } finally {
+        console.log = originalLog;
+    }
+}
+
+run()
+    .then(() => {
+        console.log('homework-reminders tests passed');
+    })
+    .catch(err => {
+        console.error(err);
+        process.exit(1);
+    });

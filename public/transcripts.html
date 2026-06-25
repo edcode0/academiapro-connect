@@ -644,16 +644,29 @@
             });
         }
 
+        function safeParseProcessedJson(rawJson) {
+            try {
+                return JSON.parse(rawJson || '{}');
+            } catch (e) {
+                return {};
+            }
+        }
+
+        function buildHistorySummaryPayload(row) {
+            const parsed = safeParseProcessedJson(row.processed_json);
+            return {
+                ...parsed,
+                transcript_id: parsed.transcript_id ?? row.transcript_id ?? row.id ?? null
+            };
+        }
+
         async function loadHistory() {
             const res = await fetch('/api/transcripts/history');
             const data = await res.json();
             const tbody = document.getElementById('historyTable');
             tbody.innerHTML = data.map(t => {
-                const parsed = JSON.parse(t.processed_json || '{}');
-                const js = btoa(encodeURIComponent(JSON.stringify({
-                    ...parsed,
-                    transcript_id: parsed.transcript_id ?? t.transcript_id ?? t.id ?? null
-                })));
+                const payload = buildHistorySummaryPayload(t);
+                const js = btoa(encodeURIComponent(JSON.stringify(payload)));
                 return `
                 <tr>
                     <td>${new Date(t.created_at).toLocaleDateString()}</td>
