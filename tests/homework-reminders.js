@@ -544,6 +544,19 @@ function testTeacherDashboardIncludesHomeworkTrackerCard() {
     assert.ok(html.includes('getHomeworkWeekdayLabel(r.scheduled_day_of_week)'));
 }
 
+function testTeacherDashboardEscapesHomeworkTrackerValues() {
+    const html = fs.readFileSync(TEACHER_DASHBOARD_PATH, 'utf8');
+
+    assert.ok(html.includes('function escapeHtml(value)'));
+    assert.ok(html.includes('${escapeHtml(r.student_name || \'\')}'));
+    assert.ok(html.includes("homeworkItems.map(item => escapeHtml(item)).join(', ')"));
+    assert.ok(html.includes('${escapeHtml(getHomeworkWeekdayLabel(r.scheduled_day_of_week))}'));
+    assert.ok(html.includes('${escapeHtml(r.scheduled_time || \'Sin hora\')}'));
+    assert.ok(html.includes('${escapeHtml(getHomeworkStatusLabel(r.status))}'));
+    assert.ok(!html.includes('<div class="homework-reminder-name">${r.student_name}</div>'));
+    assert.ok(!html.includes('${homeworkItems.length ? homeworkItems.join(\', \') : \'Sin deberes guardados\'}'));
+}
+
 function testIndexIncludesHomeworkReminderDispatchInterval() {
     const source = fs.readFileSync(INDEX_PATH, 'utf8');
 
@@ -1052,6 +1065,7 @@ async function run() {
         await testTeacherReminderListScopesToTeacher();
         await testAdminReminderListScopesToAcademyOnly();
         testTeacherDashboardIncludesHomeworkTrackerCard();
+        testTeacherDashboardEscapesHomeworkTrackerValues();
         testIndexIncludesHomeworkReminderDispatchInterval();
         await testManualFlowSkipsSecondMessageWithoutCleanHomework();
         await testManualFlowAddsSecondMessageAndPreservesTranscriptId();

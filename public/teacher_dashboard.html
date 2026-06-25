@@ -661,6 +661,15 @@
             }
         }
 
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
         function getHomeworkWeekdayLabel(day) {
             const labels = {
                 monday: 'Lunes',
@@ -787,10 +796,10 @@
                         const homeworkItems = parseHomeworkItems(r.homework_json);
                         return `
                             <div class="homework-reminder-item">
-                                <div class="homework-reminder-name">${r.student_name}</div>
-                                <div class="homework-reminder-meta">${homeworkItems.length ? homeworkItems.join(', ') : 'Sin deberes guardados'}</div>
-                                <div class="homework-reminder-schedule">${getHomeworkWeekdayLabel(r.scheduled_day_of_week)} · ${r.scheduled_time || 'Sin hora'}</div>
-                                <div class="homework-reminder-status">Estado: ${getHomeworkStatusLabel(r.status)}</div>
+                                <div class="homework-reminder-name">${escapeHtml(r.student_name || '')}</div>
+                                <div class="homework-reminder-meta">${homeworkItems.length ? homeworkItems.map(item => escapeHtml(item)).join(', ') : 'Sin deberes guardados'}</div>
+                                <div class="homework-reminder-schedule">${escapeHtml(getHomeworkWeekdayLabel(r.scheduled_day_of_week))} · ${escapeHtml(r.scheduled_time || 'Sin hora')}</div>
+                                <div class="homework-reminder-status">Estado: ${escapeHtml(getHomeworkStatusLabel(r.status))}</div>
                             </div>
                         `;
                     }).join('')}</div>`
