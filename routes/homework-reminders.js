@@ -92,14 +92,18 @@ router.post('/api/student/homework-reminders/:id/respond', authenticateJWT, requ
 
         const teacherId = owned.rows[0].teacher_id;
         if (teacherId) {
-            await createNotification(
-                teacherId,
-                req.user.academy_id,
-                'homework_status',
-                `📚 ${req.user.name} ha actualizado sus deberes`,
-                status === 'done' ? 'Marcó que ya los ha hecho' : status === 'not_done' ? 'Marcó que no los ha hecho' : 'Marcó que no tenía deberes',
-                '/teacher/dashboard?tab=homework'
-            );
+            try {
+                await createNotification(
+                    teacherId,
+                    req.user.academy_id,
+                    'homework_status',
+                    `📚 ${req.user.name} ha actualizado sus deberes`,
+                    status === 'done' ? 'Marcó que ya los ha hecho' : status === 'not_done' ? 'Marcó que no los ha hecho' : 'Marcó que no tenía deberes',
+                    '/teacher/dashboard?tab=homework'
+                );
+            } catch (notifyErr) {
+                console.error('[Homework] Teacher notification error:', notifyErr.message);
+            }
         }
 
         res.json({ success: true });

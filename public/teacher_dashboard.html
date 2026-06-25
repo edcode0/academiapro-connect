@@ -203,7 +203,8 @@
             gap: 2rem;
         }
 
-        .card {
+        .card,
+        .dashboard-card {
             background: white;
             border-radius: 1rem;
             border: 1px solid var(--border);
@@ -211,7 +212,8 @@
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
         }
 
-        .card-header {
+        .card-header,
+        .section-header {
             padding: 1.25rem 1.5rem;
             border-bottom: 1px solid var(--border);
             display: flex;
@@ -549,12 +551,12 @@
             </div>
         </div>
 
-        <div class="card" id="homework-tracker-card" style="margin-top: 2rem;">
-            <div class="card-header">
+        <section class="dashboard-card" id="homework-tracker-card" style="margin-top: 2rem;">
+            <div class="section-header">
                 <h3>📚 Seguimiento de deberes</h3>
             </div>
             <div id="homework-tracker-list" style="padding: 1.5rem;"></div>
-        </div>
+        </section>
     </main>
 
     <!-- Session Modal -->

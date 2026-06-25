@@ -490,6 +490,55 @@ async function testStudentRespondNotifiesTeacherInbox() {
     assert.deepStrictEqual(res.payload, { success: true });
 }
 
+async function testStudentRespondSucceedsWhenTeacherNotificationFails() {
+    let updateParams = null;
+    const loggedErrors = [];
+    const dbMock = createMockDb({
+        async query(sql, params) {
+            if (sql.includes('SELECT hr.id') && sql.includes('JOIN students s ON s.id = hr.student_id')) {
+                assert.deepStrictEqual(params, ['10', 55, 3]);
+                return { rows: [{ id: 10, teacher_id: 7 }] };
+            }
+            if (sql.includes('UPDATE homework_reminders') && sql.includes('student_response_at = NOW()')) {
+                updateParams = params;
+                return { rows: [], rowCount: 1 };
+            }
+            throw new Error(`Unexpected SQL in teacher notify failure test: ${sql}`);
+        }
+    });
+    const routes = loadHomeworkReminderRoutes(
+        dbMock,
+        {},
+        {
+            async createNotification() {
+                throw new Error('socket offline');
+            }
+        }
+    );
+    const handler = routes.post.get('/api/student/homework-reminders/:id/respond');
+    const req = {
+        params: { id: '10' },
+        body: { status: 'done' },
+        user: { id: 55, academy_id: 3, role: 'student', name: 'Ana' }
+    };
+    const res = createRes();
+    const originalError = console.error;
+    console.error = (...args) => {
+        loggedErrors.push(args.join(' '));
+    };
+
+    try {
+        await handler(req, res, err => { throw err; });
+    } finally {
+        console.error = originalError;
+    }
+
+    assert.deepStrictEqual(updateParams, ['done', '10']);
+    assert.strictEqual(res.statusCode, 200);
+    assert.deepStrictEqual(res.payload, { success: true });
+    assert.ok(loggedErrors.some(message => message.includes('[Homework] Teacher notification error: socket offline')));
+}
+
 async function testTeacherReminderListScopesToTeacher() {
     const dbMock = createMockDb({
         async query(sql, params) {
@@ -537,7 +586,8 @@ async function testAdminReminderListScopesToAcademyOnly() {
 function testTeacherDashboardIncludesHomeworkTrackerCard() {
     const html = fs.readFileSync(TEACHER_DASHBOARD_PATH, 'utf8');
 
-    assert.ok(html.includes('id="homework-tracker-card"'));
+    assert.ok(html.includes('<section class="dashboard-card" id="homework-tracker-card"'));
+    assert.ok(html.includes('<div class="section-header">'));
     assert.ok(html.includes('id="homework-tracker-list"'));
     assert.ok(html.includes("fetch('/api/teacher/homework-reminders', { credentials: 'include' })"));
     assert.ok(html.includes('getHomeworkStatusLabel(r.status)'));
@@ -1062,6 +1112,7 @@ async function run() {
         await testStudentRespondRejectsInvalidStatus();
         await testStudentRespondUpdatesOwnedReminder();
         await testStudentRespondNotifiesTeacherInbox();
+        await testStudentRespondSucceedsWhenTeacherNotificationFails();
         await testTeacherReminderListScopesToTeacher();
         await testAdminReminderListScopesToAcademyOnly();
         testTeacherDashboardIncludesHomeworkTrackerCard();
