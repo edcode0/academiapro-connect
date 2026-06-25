@@ -235,7 +235,7 @@ module.exports = function makeGmailService(io) {
                                 : `INSERT INTO rooms (academy_id, type, name, created_at) VALUES ($1, 'direct', $2, datetime('now'))`,
                             [teacher.academy_id, `${teacher.name} - ${student.name}`]
                         );
-                        roomId = newRoom.rows[0].id;
+                        roomId = isPostgres && newRoom.rows ? newRoom.rows[0].id : newRoom.lastID;
                         const memberSql = isPostgres
                             ? 'INSERT INTO room_members (room_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING'
                             : 'INSERT OR IGNORE INTO room_members (room_id, user_id) VALUES ($1, $2)';

@@ -233,7 +233,7 @@ ${transcriptForAI}`;
     router.post('/api/transcripts/send-to-chat', authenticateJWT, requireTeacherOrAdmin, async (req, res, next) => {
         try {
             const sender_id = req.user.id || req.user.userId;
-            const { student_id, summary, google_transcript_url, googleTranscriptUrl } = req.body;
+            const { student_id, summary } = req.body;
             const academy_id = req.user.academy_id;
 
             if (!student_id || !summary) {
