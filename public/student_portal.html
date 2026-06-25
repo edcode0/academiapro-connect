@@ -633,6 +633,19 @@
             }
         }
 
+        function getHomeworkWeekdayLabel(day) {
+            const labels = {
+                monday: 'lunes',
+                tuesday: 'martes',
+                wednesday: 'miércoles',
+                thursday: 'jueves',
+                friday: 'viernes',
+                saturday: 'sábado',
+                sunday: 'domingo'
+            };
+            return labels[day] || day;
+        }
+
         function getHomeworkReminderLinkId() {
             const id = new URLSearchParams(window.location.search).get('homeworkReminder');
             return id ? String(id) : '';
@@ -662,7 +675,7 @@
                 const reminderId = Number(r.id);
                 const items = parseHomeworkItems(r.homework_json);
                 const meta = r.status === 'scheduled' && r.scheduled_day_of_week && r.scheduled_time
-                    ? `Te lo recordaremos los ${escapeHtml(r.scheduled_day_of_week)} a las ${escapeHtml(String(r.scheduled_time).slice(0, 5))}.`
+                    ? `Te lo recordaremos los ${escapeHtml(getHomeworkWeekdayLabel(r.scheduled_day_of_week))} a las ${escapeHtml(String(r.scheduled_time).slice(0, 5))}.`
                     : '';
 
                 return `
@@ -711,37 +724,45 @@
             const time = document.getElementById(`hw-time-${id}`)?.value;
             if (!day || !time) return;
 
-            const res = await fetch(`/api/student/homework-reminders/${id}/schedule`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify({ day_of_week: day, time })
-            });
+            try {
+                const res = await fetch(`/api/student/homework-reminders/${id}/schedule`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ day_of_week: day, time })
+                });
 
-            if (!res.ok) {
+                if (!res.ok) {
+                    showToast('No se pudo guardar el recordatorio.', 'error');
+                    return;
+                }
+
+                showToast('Recordatorio guardado.', 'success');
+                await loadHomeworkReminders();
+            } catch (err) {
                 showToast('No se pudo guardar el recordatorio.', 'error');
-                return;
             }
-
-            showToast('Recordatorio guardado.', 'success');
-            await loadHomeworkReminders();
         }
 
         async function respondHomeworkReminder(id, status) {
-            const res = await fetch(`/api/student/homework-reminders/${id}/respond`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify({ status })
-            });
+            try {
+                const res = await fetch(`/api/student/homework-reminders/${id}/respond`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ status })
+                });
 
-            if (!res.ok) {
+                if (!res.ok) {
+                    showToast('No se pudo guardar tu respuesta.', 'error');
+                    return;
+                }
+
+                showToast('Respuesta guardada.', 'success');
+                await loadHomeworkReminders();
+            } catch (err) {
                 showToast('No se pudo guardar tu respuesta.', 'error');
-                return;
             }
-
-            showToast('Respuesta guardada.', 'success');
-            await loadHomeworkReminders();
         }
 
         async function loadProfile() {
