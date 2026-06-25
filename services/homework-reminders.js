@@ -54,6 +54,10 @@ function getTranscriptIdForReminder(processed = {}, fallbackTranscriptId = null)
     return transcriptId == null || transcriptId === '' ? null : transcriptId;
 }
 
+function validateHomeworkResponseStatus(status) {
+    return ['no_homework', 'not_done', 'done'].includes(status);
+}
+
 function escapeHtml(value) {
     return String(value)
         .replace(/&/g, '&amp;')
@@ -114,6 +118,7 @@ module.exports = {
     canScheduleReminder,
     shouldCreateReminderFromProcessed,
     getTranscriptIdForReminder,
+    validateHomeworkResponseStatus,
     buildHomeworkReminderPrompt,
     createHomeworkReminderFromTranscript
 };

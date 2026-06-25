@@ -8,6 +8,7 @@ const Module = require('module');
 
 const ROOT = path.resolve(__dirname, '..');
 const SERVICE_PATH = path.join(ROOT, 'services/homework-reminders.js');
+const HOMEWORK_REMINDER_ROUTES_PATH = path.join(ROOT, 'routes/homework-reminders.js');
 const ROUTES_PATH = path.join(ROOT, 'routes/transcripts.js');
 const GMAIL_PATH = path.join(ROOT, 'services/gmail.js');
 const HTML_PATH = path.join(ROOT, 'public/transcripts.html');
@@ -218,6 +219,25 @@ function loadHomeworkReminderService(dbMock) {
     });
 }
 
+function loadHomeworkReminderRoutes(dbMock, serviceOverrides = {}) {
+    const routerHarness = createRouterHarness();
+    purgeModules([HOMEWORK_REMINDER_ROUTES_PATH]);
+    loadWithMocks(HOMEWORK_REMINDER_ROUTES_PATH, {
+        express: routerHarness.express,
+        '../db': dbMock,
+        '../middleware/auth': { authenticateJWT: createNoopMiddleware() },
+        '../middleware/roles': {
+            requireTeacherOrAdmin: createNoopMiddleware(),
+            requireStudent: createNoopMiddleware()
+        },
+        '../services/homework-reminders': {
+            ...loadHomeworkReminderService(dbMock),
+            ...serviceOverrides
+        }
+    });
+    return routerHarness.routes;
+}
+
 async function testServiceHelpers() {
     const dbMock = createMockDb();
     const service = loadHomeworkReminderService(dbMock);
@@ -236,6 +256,170 @@ async function testServiceHelpers() {
     assert.strictEqual(service.shouldCreateReminderFromProcessed({ deberes: ['repasar matrices'] }), true);
     assert.strictEqual(service.getTranscriptIdForReminder({ transcript_id: 42 }), 42);
     assert.strictEqual(service.getTranscriptIdForReminder({}, 17), 17);
+    assert.strictEqual(service.validateHomeworkResponseStatus('done'), true);
+    assert.strictEqual(service.validateHomeworkResponseStatus('not_done'), true);
+    assert.strictEqual(service.validateHomeworkResponseStatus('no_homework'), true);
+    assert.strictEqual(service.validateHomeworkResponseStatus('later'), false);
+}
+
+async function testStudentReminderListUsesStudentOwnershipScope() {
+    const dbMock = createMockDb({
+        async query(sql, params) {
+            if (sql.includes('FROM homework_reminders hr') && sql.includes('JOIN students s ON s.id = hr.student_id')) {
+                assert.deepStrictEqual(params, [55, 3]);
+                return {
+                    rows: [{ id: 10, status: 'pending_schedule' }]
+                };
+            }
+            throw new Error(`Unexpected SQL in student list test: ${sql}`);
+        }
+    });
+    const routes = loadHomeworkReminderRoutes(dbMock);
+    const handler = routes.get.get('/api/student/homework-reminders');
+    const req = {
+        user: { id: 55, academy_id: 3, role: 'student' }
+    };
+    const res = createRes();
+
+    await handler(req, res, err => { throw err; });
+
+    assert.strictEqual(res.statusCode, 200);
+    assert.deepStrictEqual(res.payload, [{ id: 10, status: 'pending_schedule' }]);
+}
+
+async function testStudentScheduleUpdatesOwnedReminder() {
+    let updateParams = null;
+    const computedDate = new Date('2026-06-29T18:30:00.000Z');
+    const dbMock = createMockDb({
+        async query(sql, params) {
+            if (sql.includes('SELECT hr.id') && sql.includes('JOIN students s ON s.id = hr.student_id')) {
+                assert.deepStrictEqual(params, ['10', 55, 3]);
+                return { rows: [{ id: 10 }] };
+            }
+            if (sql.includes('UPDATE homework_reminders') && sql.includes("status = 'scheduled'")) {
+                updateParams = params;
+                return { rows: [], rowCount: 1 };
+            }
+            throw new Error(`Unexpected SQL in student schedule test: ${sql}`);
+        }
+    });
+    const routes = loadHomeworkReminderRoutes(dbMock, {
+        computeNextScheduledFor(dayOfWeek, time) {
+            assert.strictEqual(dayOfWeek, 'monday');
+            assert.strictEqual(time, '18:30');
+            return computedDate;
+        }
+    });
+    const handler = routes.post.get('/api/student/homework-reminders/:id/schedule');
+    const req = {
+        params: { id: '10' },
+        body: { day_of_week: 'monday', time: '18:30' },
+        user: { id: 55, academy_id: 3, role: 'student' }
+    };
+    const res = createRes();
+
+    await handler(req, res, err => { throw err; });
+
+    assert.deepStrictEqual(updateParams, ['monday', '18:30', computedDate.toISOString(), '10']);
+    assert.deepStrictEqual(res.payload, {
+        success: true,
+        scheduled_for: computedDate.toISOString()
+    });
+}
+
+async function testStudentRespondRejectsInvalidStatus() {
+    const dbMock = createMockDb({
+        async query(sql) {
+            throw new Error(`Query should not run for invalid status: ${sql}`);
+        }
+    });
+    const routes = loadHomeworkReminderRoutes(dbMock);
+    const handler = routes.post.get('/api/student/homework-reminders/:id/respond');
+    const req = {
+        params: { id: '10' },
+        body: { status: 'later' },
+        user: { id: 55, academy_id: 3, role: 'student' }
+    };
+    const res = createRes();
+
+    await handler(req, res, err => { throw err; });
+
+    assert.strictEqual(res.statusCode, 400);
+    assert.deepStrictEqual(res.payload, { error: 'Estado inválido' });
+}
+
+async function testStudentRespondUpdatesOwnedReminder() {
+    let updateParams = null;
+    const dbMock = createMockDb({
+        async query(sql, params) {
+            if (sql.includes('SELECT hr.id') && sql.includes('JOIN students s ON s.id = hr.student_id')) {
+                assert.deepStrictEqual(params, ['10', 55, 3]);
+                return { rows: [{ id: 10 }] };
+            }
+            if (sql.includes('UPDATE homework_reminders') && sql.includes('student_response_at = NOW()')) {
+                updateParams = params;
+                return { rows: [], rowCount: 1 };
+            }
+            throw new Error(`Unexpected SQL in student respond test: ${sql}`);
+        }
+    });
+    const routes = loadHomeworkReminderRoutes(dbMock);
+    const handler = routes.post.get('/api/student/homework-reminders/:id/respond');
+    const req = {
+        params: { id: '10' },
+        body: { status: 'done' },
+        user: { id: 55, academy_id: 3, role: 'student' }
+    };
+    const res = createRes();
+
+    await handler(req, res, err => { throw err; });
+
+    assert.deepStrictEqual(updateParams, ['done', '10']);
+    assert.deepStrictEqual(res.payload, { success: true });
+}
+
+async function testTeacherReminderListScopesToTeacher() {
+    const dbMock = createMockDb({
+        async query(sql, params) {
+            assert.ok(sql.includes('hr.teacher_id = $2'));
+            assert.deepStrictEqual(params, [3, 7]);
+            return {
+                rows: [{ id: 22, student_name: 'Ana' }]
+            };
+        }
+    });
+    const routes = loadHomeworkReminderRoutes(dbMock);
+    const handler = routes.get.get('/api/teacher/homework-reminders');
+    const req = {
+        user: { id: 7, academy_id: 3, role: 'teacher' }
+    };
+    const res = createRes();
+
+    await handler(req, res, err => { throw err; });
+
+    assert.deepStrictEqual(res.payload, [{ id: 22, student_name: 'Ana' }]);
+}
+
+async function testAdminReminderListScopesToAcademyOnly() {
+    const dbMock = createMockDb({
+        async query(sql, params) {
+            assert.ok(!sql.includes('hr.teacher_id = $2'));
+            assert.deepStrictEqual(params, [3]);
+            return {
+                rows: [{ id: 23, student_name: 'Luis' }]
+            };
+        }
+    });
+    const routes = loadHomeworkReminderRoutes(dbMock);
+    const handler = routes.get.get('/api/teacher/homework-reminders');
+    const req = {
+        user: { id: 1, academy_id: 3, role: 'admin' }
+    };
+    const res = createRes();
+
+    await handler(req, res, err => { throw err; });
+
+    assert.deepStrictEqual(res.payload, [{ id: 23, student_name: 'Luis' }]);
 }
 
 async function testManualFlowSkipsSecondMessageWithoutCleanHomework() {
@@ -726,6 +910,12 @@ async function run() {
 
     try {
         await testServiceHelpers();
+        await testStudentReminderListUsesStudentOwnershipScope();
+        await testStudentScheduleUpdatesOwnedReminder();
+        await testStudentRespondRejectsInvalidStatus();
+        await testStudentRespondUpdatesOwnedReminder();
+        await testTeacherReminderListScopesToTeacher();
+        await testAdminReminderListScopesToAcademyOnly();
         await testManualFlowSkipsSecondMessageWithoutCleanHomework();
         await testManualFlowAddsSecondMessageAndPreservesTranscriptId();
         await testManualFlowNormalizesStudentUserIdToStudentRecordId();

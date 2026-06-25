@@ -91,6 +91,7 @@ const aiRouter              = require('./routes/ai');
 const notificationsRouter   = require('./routes/notifications');
 const reportsRouter         = require('./routes/reports');
 const settingsRouter        = require('./routes/settings');
+const homeworkRemindersRouter = require('./routes/homework-reminders');
 const makeTranscriptsRouter = require('./routes/transcripts');
 setNotifIo(io);
 
@@ -195,6 +196,7 @@ app.use(aiRouter);
 app.use('/api', notificationsRouter);
 app.use('/api', reportsRouter);
 app.use('/api', settingsRouter);
+app.use(homeworkRemindersRouter);
 app.use(makeTranscriptsRouter(io));
 
 // Public static files
