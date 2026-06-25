@@ -601,6 +601,10 @@
         let lastProcessedJson = null;
         let currentStudentId = null;
 
+        function storeLastProcessedJson(data) {
+            lastProcessedJson = data ? { ...data, transcript_id: data.transcript_id || null } : null;
+        }
+
         async function init() {
             try {
                 const res = await fetch('/auth/me');
@@ -705,7 +709,7 @@
                 document.getElementById('btnProcess').disabled = false;
 
                 if (res.ok) {
-                    lastProcessedJson = data;
+                    storeLastProcessedJson(data);
                     currentStudentId = student_id;
                     renderResults(data);
                     loadHistory();
@@ -752,7 +756,7 @@
             try {
                 const raw = decodeURIComponent(atob(b64json));
                 const parsed = JSON.parse(raw);
-                lastProcessedJson = parsed;
+                storeLastProcessedJson(parsed);
                 currentStudentId = student_id;
                 document.getElementById('studentSelect').value = student_id;
                 renderResults(parsed);

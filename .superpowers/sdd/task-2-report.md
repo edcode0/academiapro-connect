@@ -1,0 +1,77 @@
+# Task 2 Report: Create reminders from transcript flows
+
+## What I implemented
+
+- Extended `tests/homework-reminders.js` with the Task 2 RED/GREEN assertions for transcript-driven reminder creation.
+- Added shared reminder helpers in `services/homework-reminders.js`:
+  - `shouldCreateReminderFromProcessed(processed = {})`
+  - `buildHomeworkReminderPrompt(reminderId, homeworkList)`
+  - `createHomeworkReminderFromTranscript({ academyId, teacherId, studentId, transcriptId, processed })`
+- Updated `routes/transcripts.js` so manual transcript processing returns `transcript_id` and manual `send-to-chat` creates a homework reminder plus the second CTA chat message through the shared service.
+- Updated `services/gmail.js` so the Gmail transcript flow reuses the same shared reminder creation service and posts the same second CTA message after transcript storage.
+- Updated `public/transcripts.html` so the processed transcript payload explicitly preserves `transcript_id` in `lastProcessedJson`.
+
+## Tests run and results
+
+1. RED:
+   - Command: `node tests/homework-reminders.js`
+   - Result: FAIL
+   - Output:
+
+```text
+/Users/edu/Desktop/app academy/AcademiaPro/tests/homework-reminders.js:21
+    assert.strictEqual(shouldCreateReminderFromProcessed({ deberes: [] }), false);
+                       ^
+
+TypeError: shouldCreateReminderFromProcessed is not a function
+```
+
+2. Verification setup:
+   - Command: `npm rebuild sqlite3`
+   - Result: PASS
+   - Notes: the first focused test run exposed a local native-module mismatch for `sqlite3` under the current Node runtime, so I rebuilt it before rerunning the task test.
+
+3. GREEN:
+   - Command: `node tests/homework-reminders.js`
+   - Result: PASS
+   - Output:
+
+```text
+[dotenv@17.3.1] injecting env (8) from .env -- tip: ⚡️ secrets for agents: https://dotenvx.com/as2
+Using PostgreSQL (Railway)
+homework-reminders tests passed
+```
+
+4. Syntax verification:
+   - Command: `node --check services/homework-reminders.js`
+   - Result: PASS
+   - Command: `node --check routes/transcripts.js`
+   - Result: PASS
+   - Command: `node --check services/gmail.js`
+   - Result: PASS
+
+## TDD evidence
+
+- RED command: `node tests/homework-reminders.js`
+- RED result: `TypeError: shouldCreateReminderFromProcessed is not a function`
+- GREEN command: `node tests/homework-reminders.js`
+- GREEN result: `homework-reminders tests passed`
+
+## Files changed
+
+- `services/homework-reminders.js`
+- `routes/transcripts.js`
+- `services/gmail.js`
+- `public/transcripts.html`
+- `tests/homework-reminders.js`
+
+## Self-review findings
+
+- The manual and Gmail transcript flows now both create reminders through the same service entry point, so reminder creation logic is not duplicated.
+- The transcript chat formatting helper is still reused in both flows.
+- Reminder CTA message text and styles match the task brief verbatim, while homework list items are HTML-escaped before rendering.
+- Real-time chat emission now includes the second reminder CTA message in both flows so the chat stays consistent without waiting for a refresh.
+
+## Concerns
+
+- `routes/transcripts.js`, `services/gmail.js`, and `public/transcripts.html` already had local uncommitted edits before this task started. I worked with those changes in place and did not revert them.

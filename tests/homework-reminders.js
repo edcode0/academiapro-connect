@@ -4,7 +4,8 @@ const assert = require('assert');
 const {
     normalizeHomeworkList,
     computeNextScheduledFor,
-    canScheduleReminder
+    canScheduleReminder,
+    shouldCreateReminderFromProcessed
 } = require('../services/homework-reminders');
 
 function run() {
@@ -17,6 +18,11 @@ function run() {
     assert.ok(next instanceof Date);
     assert.strictEqual(canScheduleReminder({ status: 'pending_schedule' }), true);
     assert.strictEqual(canScheduleReminder({ status: 'done' }), false);
+    assert.strictEqual(shouldCreateReminderFromProcessed({ deberes: [] }), false);
+    assert.strictEqual(
+        shouldCreateReminderFromProcessed({ deberes: ['repasar matrices'] }),
+        true
+    );
 }
 
 run();

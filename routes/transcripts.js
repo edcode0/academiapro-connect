@@ -10,6 +10,11 @@ const db        = require('../db');
 const { google } = require('googleapis');
 const groqClient             = require('../services/groq');
 const { makeOAuth2Client }   = require('../services/calendar');
+const { buildTranscriptChatMessage } = require('../services/transcript-message');
+const {
+    createHomeworkReminderFromTranscript,
+    buildHomeworkReminderPrompt
+} = require('../services/homework-reminders');
 const { pdfUpload }          = require('../utils/multer');
 const { authenticateJWT }    = require('../middleware/auth');
 const { requireAdmin, requireTeacherOrAdmin } = require('../middleware/roles');
@@ -213,12 +218,13 @@ ${transcriptForAI}`;
 
             // Save History - raw_text subset
             const insertSql = isPostgres
-                ? 'INSERT INTO transcripts (academy_id, teacher_id, student_id, raw_text, processed_json) VALUES ($1, $2, $3, $4, $5)'
+                ? 'INSERT INTO transcripts (academy_id, teacher_id, student_id, raw_text, processed_json) VALUES ($1, $2, $3, $4, $5) RETURNING id'
                 : 'INSERT INTO transcripts (academy_id, teacher_id, student_id, raw_text, processed_json) VALUES ($1, $2, $3, $4, $5)';
 
-            await db.query(insertSql, [req.user.academy_id, ['teacher', 'admin'].includes(req.user.role) ? req.user.id : null, student_id, transcript_text.substring(0, 5000), JSON.stringify(jsonContent)]);
+            const transcriptInsert = await db.query(insertSql, [req.user.academy_id, ['teacher', 'admin'].includes(req.user.role) ? req.user.id : null, student_id, transcript_text.substring(0, 5000), JSON.stringify(jsonContent)]);
+            const transcriptId = transcriptInsert.rows?.[0]?.id || transcriptInsert.lastID || transcriptInsert.insertId || null;
 
-            res.json(jsonContent);
+            res.json({ ...jsonContent, transcript_id: transcriptId });
         } catch (err) {
             next(err);
         }
@@ -228,7 +234,7 @@ ${transcriptForAI}`;
     router.post('/api/transcripts/send-to-chat', authenticateJWT, requireTeacherOrAdmin, async (req, res, next) => {
         try {
             const sender_id = req.user.id || req.user.userId;
-            const { student_id, summary } = req.body;
+            const { student_id, summary, google_transcript_url, googleTranscriptUrl } = req.body;
             const academy_id = req.user.academy_id;
 
             if (!student_id || !summary) {
@@ -340,11 +346,9 @@ ${transcriptForAI}`;
                 s = { resumen: String(summary), deberes: [], conceptos_clave: [], pistas_profesor: [], mensaje_motivador: '' };
             }
 
-            const messageText = `📚 *Resumen de tu clase de hoy*\n\n${s.resumen || ''}\n\n` +
-                `📝 *Deberes para casa:*\n${(s.deberes || []).map(d => '• ' + d).join('\n')}\n\n` +
-                `💡 *Conceptos importantes:*\n${(s.conceptos_clave || []).map(c => '• ' + c).join('\n')}\n\n` +
-                `🎯 *Consejos de tu profe:*\n${(s.pistas_profesor || []).map(p => '• ' + p).join('\n')}\n\n` +
-                `💪 ${s.mensaje_motivador || ''}`;
+            const messageText = buildTranscriptChatMessage(s, {
+                googleTranscriptUrl: google_transcript_url || googleTranscriptUrl || s.google_transcript_url || s.recording_link || null
+            });
 
             // Step 4: Save message
             const insertMsgSql = isPostgres
@@ -354,6 +358,20 @@ ${transcriptForAI}`;
                    VALUES ($1, $2, $3, $4, 0, datetime('now'))`;
 
             await db.query(insertMsgSql, [roomId, sender_id, messageText, academy_id]);
+
+            const reminder = await createHomeworkReminderFromTranscript({
+                academyId: academy_id,
+                teacherId: sender_id,
+                studentId: student_id,
+                transcriptId: s.transcript_id || null,
+                processed: s
+            });
+
+            let promptHtml = null;
+            if (reminder) {
+                promptHtml = buildHomeworkReminderPrompt(reminder.id, reminder.homeworkList);
+                await db.query(insertMsgSql, [roomId, sender_id, promptHtml, academy_id]);
+            }
 
             // Step 5: Emit
             const senderInfo = await db.query('SELECT name FROM users WHERE id = $1', [sender_id]);
@@ -366,6 +384,16 @@ ${transcriptForAI}`;
                 content: messageText,
                 created_at: new Date().toISOString()
             });
+
+            if (promptHtml) {
+                io.to('room_' + roomId).emit('new_message', {
+                    room_id: roomId,
+                    sender_id: sender_id,
+                    sender_name: senderRows[0]?.name || 'Profesor',
+                    content: promptHtml,
+                    created_at: new Date().toISOString()
+                });
+            }
 
             res.json({ success: true, room_id: roomId });
 

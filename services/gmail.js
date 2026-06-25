@@ -3,6 +3,11 @@
 const { google }             = require('googleapis');
 const db                     = require('../db');
 const groqClient             = require('./groq');
+const { buildTranscriptChatMessage } = require('./transcript-message');
+const {
+    createHomeworkReminderFromTranscript,
+    buildHomeworkReminderPrompt
+} = require('./homework-reminders');
 const { createNotification } = require('../notifications');
 const { makeOAuth2Client }   = require('./calendar');
 
@@ -153,6 +158,10 @@ module.exports = function makeGmailService(io) {
                     continue;
                 }
 
+                if (recordingLink) {
+                    analysisData.google_transcript_url = recordingLink;
+                }
+
                 // Match student by name — guard against empty string (includes('') is always true)
                 const nameToMatch = (analysisData.student_name || '').trim();
                 const exactMatch = nameToMatch.length >= 2
@@ -225,14 +234,9 @@ module.exports = function makeGmailService(io) {
                 }
 
                 // Build and save chat message
-                const d = analysisData;
-                const chatMessage =
-                    `📚 *Resumen de tu clase*\n\n${d.resumen || d.summary || ''}\n\n` +
-                    `📝 *Deberes:*\n${(d.deberes || d.homework || []).map(x => '• ' + x).join('\n') || '• Sin deberes'}\n\n` +
-                    `💡 *Conceptos:*\n${(d.conceptos_clave || d.topics_covered || []).map(x => '• ' + x).join('\n')}\n\n` +
-                    `🎯 *Consejos:*\n${(d.pistas_profesor || d.key_points || []).map(x => '• ' + x).join('\n')}\n\n` +
-                    `💪 ${d.mensaje_motivador || d.teacher_notes || ''}` +
-                    (recordingLink ? `\n\n🎥 *Grabación de la clase:*\n${recordingLink}` : '');
+                const chatMessage = buildTranscriptChatMessage(analysisData, {
+                    googleTranscriptUrl: recordingLink
+                });
 
                 await db.query(
                     isPostgres
@@ -242,11 +246,33 @@ module.exports = function makeGmailService(io) {
                 );
 
                 // Save transcript record (with gmail_msg_id for deduplication)
-                await db.query(
-                    'INSERT INTO transcripts (academy_id, teacher_id, student_id, raw_text, processed_json, gmail_msg_id) VALUES ($1, $2, $3, $4, $5, $6)',
+                const transcriptInsert = await db.query(
+                    isPostgres
+                        ? 'INSERT INTO transcripts (academy_id, teacher_id, student_id, raw_text, processed_json, gmail_msg_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id'
+                        : 'INSERT INTO transcripts (academy_id, teacher_id, student_id, raw_text, processed_json, gmail_msg_id) VALUES ($1, $2, $3, $4, $5, $6)',
                     [teacher.academy_id, teacher.id, student.id, body.substring(0, 5000), JSON.stringify(analysisData), msg.id]
                 );
+                const transcriptId = transcriptInsert.rows?.[0]?.id || transcriptInsert.lastID || transcriptInsert.insertId || null;
                 console.log('[Gmail] Transcript saved for student:', student.name);
+
+                const reminder = await createHomeworkReminderFromTranscript({
+                    academyId: teacher.academy_id,
+                    teacherId: teacher.id,
+                    studentId: student.id,
+                    transcriptId,
+                    processed: analysisData
+                });
+
+                let promptHtml = null;
+                if (reminder) {
+                    promptHtml = buildHomeworkReminderPrompt(reminder.id, reminder.homeworkList);
+                    await db.query(
+                        isPostgres
+                            ? `INSERT INTO messages (room_id, sender_id, academy_id, content, created_at) VALUES ($1, $2, $3, $4, NOW())`
+                            : `INSERT INTO messages (room_id, sender_id, academy_id, content, created_at) VALUES ($1, $2, $3, $4, datetime('now'))`,
+                        [roomId, teacher.id, teacher.academy_id, promptHtml]
+                    );
+                }
 
                 // Notify student
                 if (student.user_id) {
@@ -266,6 +292,17 @@ module.exports = function makeGmailService(io) {
                     content:     chatMessage,
                     created_at:  new Date().toISOString()
                 });
+
+                if (promptHtml) {
+                    io.to(`room_${roomId}`).emit('new_message', {
+                        room_id:     roomId,
+                        sender_id:   teacher.id,
+                        sender_name: teacher.name,
+                        sender_role: 'teacher',
+                        content:     promptHtml,
+                        created_at:  new Date().toISOString()
+                    });
+                }
 
                 // Mark email as read
                 await gmail.users.messages.modify({
