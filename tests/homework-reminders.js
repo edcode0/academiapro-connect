@@ -294,7 +294,7 @@ async function testStudentScheduleUpdatesOwnedReminder() {
         async query(sql, params) {
             if (sql.includes('SELECT hr.id') && sql.includes('JOIN students s ON s.id = hr.student_id')) {
                 assert.deepStrictEqual(params, ['10', 55, 3]);
-                return { rows: [{ id: 10 }] };
+                return { rows: [{ id: 10, status: 'pending_schedule' }] };
             }
             if (sql.includes('UPDATE homework_reminders') && sql.includes("status = 'scheduled'")) {
                 updateParams = params;
@@ -325,6 +325,68 @@ async function testStudentScheduleUpdatesOwnedReminder() {
         success: true,
         scheduled_for: computedDate.toISOString()
     });
+}
+
+async function testStudentScheduleRejectsInvalidScheduleInput() {
+    let updateAttempted = false;
+    const dbMock = createMockDb({
+        async query(sql, params) {
+            if (sql.includes('SELECT hr.id') && sql.includes('JOIN students s ON s.id = hr.student_id')) {
+                assert.deepStrictEqual(params, ['10', 55, 3]);
+                return { rows: [{ id: 10, status: 'pending_schedule' }] };
+            }
+            if (sql.includes('UPDATE homework_reminders')) {
+                updateAttempted = true;
+                return { rows: [], rowCount: 1 };
+            }
+            throw new Error(`Unexpected SQL in invalid schedule test: ${sql}`);
+        }
+    });
+    const routes = loadHomeworkReminderRoutes(dbMock);
+    const handler = routes.post.get('/api/student/homework-reminders/:id/schedule');
+    const req = {
+        params: { id: '10' },
+        body: { day_of_week: 'laterday', time: 'not-a-time' },
+        user: { id: 55, academy_id: 3, role: 'student' }
+    };
+    const res = createRes();
+
+    await handler(req, res, err => { throw err; });
+
+    assert.strictEqual(updateAttempted, false);
+    assert.strictEqual(res.statusCode, 400);
+    assert.deepStrictEqual(res.payload, { error: 'Horario inválido' });
+}
+
+async function testStudentScheduleRejectsUnschedulableReminderStatus() {
+    let updateAttempted = false;
+    const dbMock = createMockDb({
+        async query(sql, params) {
+            if (sql.includes('SELECT hr.id') && sql.includes('JOIN students s ON s.id = hr.student_id')) {
+                assert.deepStrictEqual(params, ['10', 55, 3]);
+                return { rows: [{ id: 10, status: 'done' }] };
+            }
+            if (sql.includes('UPDATE homework_reminders')) {
+                updateAttempted = true;
+                return { rows: [], rowCount: 1 };
+            }
+            throw new Error(`Unexpected SQL in unschedulable schedule test: ${sql}`);
+        }
+    });
+    const routes = loadHomeworkReminderRoutes(dbMock);
+    const handler = routes.post.get('/api/student/homework-reminders/:id/schedule');
+    const req = {
+        params: { id: '10' },
+        body: { day_of_week: 'monday', time: '18:30' },
+        user: { id: 55, academy_id: 3, role: 'student' }
+    };
+    const res = createRes();
+
+    await handler(req, res, err => { throw err; });
+
+    assert.strictEqual(updateAttempted, false);
+    assert.strictEqual(res.statusCode, 400);
+    assert.deepStrictEqual(res.payload, { error: 'Recordatorio no programable' });
 }
 
 async function testStudentRespondRejectsInvalidStatus() {
@@ -912,6 +974,8 @@ async function run() {
         await testServiceHelpers();
         await testStudentReminderListUsesStudentOwnershipScope();
         await testStudentScheduleUpdatesOwnedReminder();
+        await testStudentScheduleRejectsInvalidScheduleInput();
+        await testStudentScheduleRejectsUnschedulableReminderStatus();
         await testStudentRespondRejectsInvalidStatus();
         await testStudentRespondUpdatesOwnedReminder();
         await testTeacherReminderListScopesToTeacher();

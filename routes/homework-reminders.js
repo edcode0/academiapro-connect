@@ -6,9 +6,11 @@ const db = require('../db');
 const { authenticateJWT } = require('../middleware/auth');
 const { requireTeacherOrAdmin, requireStudent } = require('../middleware/roles');
 const {
+    canScheduleReminder,
     computeNextScheduledFor,
     validateHomeworkResponseStatus
 } = require('../services/homework-reminders');
+const nowSql = db.isPostgres ? 'NOW()' : "datetime('now')";
 
 router.get('/api/student/homework-reminders', authenticateJWT, requireStudent, async (req, res, next) => {
     try {
@@ -30,13 +32,16 @@ router.post('/api/student/homework-reminders/:id/schedule', authenticateJWT, req
     try {
         const { day_of_week, time } = req.body;
         const owned = await db.query(
-            `SELECT hr.id
+            `SELECT hr.id, hr.status
              FROM homework_reminders hr
              JOIN students s ON s.id = hr.student_id
              WHERE hr.id = $1 AND s.user_id = $2 AND hr.academy_id = $3`,
             [req.params.id, req.user.id, req.user.academy_id]
         );
         if (!owned.rows?.length) return res.status(404).json({ error: 'Recordatorio no encontrado' });
+        if (!canScheduleReminder(owned.rows[0])) {
+            return res.status(400).json({ error: 'Recordatorio no programable' });
+        }
 
         const scheduledFor = computeNextScheduledFor(day_of_week, time);
         await db.query(
@@ -46,12 +51,15 @@ router.post('/api/student/homework-reminders/:id/schedule', authenticateJWT, req
                  scheduled_for = $3,
                  status = 'scheduled',
                  reminder_sent = FALSE,
-                 updated_at = NOW()
+                 updated_at = ${nowSql}
              WHERE id = $4`,
             [day_of_week, time, scheduledFor.toISOString(), req.params.id]
         );
         res.json({ success: true, scheduled_for: scheduledFor.toISOString() });
     } catch (err) {
+        if (err && err.message === 'Invalid schedule') {
+            return res.status(400).json({ error: 'Horario inválido' });
+        }
         next(err);
     }
 });
@@ -75,8 +83,8 @@ router.post('/api/student/homework-reminders/:id/respond', authenticateJWT, requ
         await db.query(
             `UPDATE homework_reminders
              SET status = $1,
-                 student_response_at = NOW(),
-                 updated_at = NOW()
+                 student_response_at = ${nowSql},
+                 updated_at = ${nowSql}
              WHERE id = $2`,
             [status, req.params.id]
         );
