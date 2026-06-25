@@ -11,6 +11,8 @@ const SERVICE_PATH = path.join(ROOT, 'services/homework-reminders.js');
 const HOMEWORK_REMINDER_ROUTES_PATH = path.join(ROOT, 'routes/homework-reminders.js');
 const ROUTES_PATH = path.join(ROOT, 'routes/transcripts.js');
 const GMAIL_PATH = path.join(ROOT, 'services/gmail.js');
+const INDEX_PATH = path.join(ROOT, 'index.js');
+const TEACHER_DASHBOARD_PATH = path.join(ROOT, 'public/teacher_dashboard.html');
 const HTML_PATH = path.join(ROOT, 'public/transcripts.html');
 const QUIET_LOG_PREFIXES = ['[dotenv@', 'Using PostgreSQL', '[Gmail] '];
 const QUIET_ERROR_PREFIXES = ['send-to-chat error:', '[Gmail] Error processing email:'];
@@ -219,7 +221,7 @@ function loadHomeworkReminderService(dbMock) {
     });
 }
 
-function loadHomeworkReminderRoutes(dbMock, serviceOverrides = {}) {
+function loadHomeworkReminderRoutes(dbMock, serviceOverrides = {}, notificationOverrides = {}) {
     const routerHarness = createRouterHarness();
     purgeModules([HOMEWORK_REMINDER_ROUTES_PATH]);
     loadWithMocks(HOMEWORK_REMINDER_ROUTES_PATH, {
@@ -233,7 +235,8 @@ function loadHomeworkReminderRoutes(dbMock, serviceOverrides = {}) {
         '../services/homework-reminders': {
             ...loadHomeworkReminderService(dbMock),
             ...serviceOverrides
-        }
+        },
+        '../notifications': notificationOverrides
     });
     return routerHarness.routes;
 }
@@ -440,6 +443,53 @@ async function testStudentRespondUpdatesOwnedReminder() {
     assert.deepStrictEqual(res.payload, { success: true });
 }
 
+async function testStudentRespondNotifiesTeacherInbox() {
+    let updateParams = null;
+    const notificationCalls = [];
+    const dbMock = createMockDb({
+        async query(sql, params) {
+            if (sql.includes('SELECT hr.id') && sql.includes('JOIN students s ON s.id = hr.student_id')) {
+                assert.deepStrictEqual(params, ['10', 55, 3]);
+                return { rows: [{ id: 10, teacher_id: 7 }] };
+            }
+            if (sql.includes('UPDATE homework_reminders') && sql.includes('student_response_at = NOW()')) {
+                updateParams = params;
+                return { rows: [], rowCount: 1 };
+            }
+            throw new Error(`Unexpected SQL in teacher inbox notify test: ${sql}`);
+        }
+    });
+    const routes = loadHomeworkReminderRoutes(
+        dbMock,
+        {},
+        {
+            async createNotification(...args) {
+                notificationCalls.push(args);
+            }
+        }
+    );
+    const handler = routes.post.get('/api/student/homework-reminders/:id/respond');
+    const req = {
+        params: { id: '10' },
+        body: { status: 'not_done' },
+        user: { id: 55, academy_id: 3, role: 'student', name: 'Ana' }
+    };
+    const res = createRes();
+
+    await handler(req, res, err => { throw err; });
+
+    assert.deepStrictEqual(updateParams, ['not_done', '10']);
+    assert.deepStrictEqual(notificationCalls, [[
+        7,
+        3,
+        'homework_status',
+        '📚 Ana ha actualizado sus deberes',
+        'Marcó que no los ha hecho',
+        '/teacher/dashboard?tab=homework'
+    ]]);
+    assert.deepStrictEqual(res.payload, { success: true });
+}
+
 async function testTeacherReminderListScopesToTeacher() {
     const dbMock = createMockDb({
         async query(sql, params) {
@@ -482,6 +532,26 @@ async function testAdminReminderListScopesToAcademyOnly() {
     await handler(req, res, err => { throw err; });
 
     assert.deepStrictEqual(res.payload, [{ id: 23, student_name: 'Luis' }]);
+}
+
+function testTeacherDashboardIncludesHomeworkTrackerCard() {
+    const html = fs.readFileSync(TEACHER_DASHBOARD_PATH, 'utf8');
+
+    assert.ok(html.includes('id="homework-tracker-card"'));
+    assert.ok(html.includes('id="homework-tracker-list"'));
+    assert.ok(html.includes("fetch('/api/teacher/homework-reminders', { credentials: 'include' })"));
+    assert.ok(html.includes('getHomeworkStatusLabel(r.status)'));
+    assert.ok(html.includes('getHomeworkWeekdayLabel(r.scheduled_day_of_week)'));
+}
+
+function testIndexIncludesHomeworkReminderDispatchInterval() {
+    const source = fs.readFileSync(INDEX_PATH, 'utf8');
+
+    assert.ok(source.includes("FROM homework_reminders"));
+    assert.ok(source.includes("type,\n                'homework_reminder'") || source.includes("'homework_reminder'"));
+    assert.ok(source.includes('📚 Es la hora de hacer tus deberes'));
+    assert.ok(source.includes('/student-portal?homeworkReminder=${reminder.id}'));
+    assert.ok(source.includes('UPDATE homework_reminders SET reminder_sent = TRUE'));
 }
 
 async function testManualFlowSkipsSecondMessageWithoutCleanHomework() {
@@ -978,8 +1048,11 @@ async function run() {
         await testStudentScheduleRejectsUnschedulableReminderStatus();
         await testStudentRespondRejectsInvalidStatus();
         await testStudentRespondUpdatesOwnedReminder();
+        await testStudentRespondNotifiesTeacherInbox();
         await testTeacherReminderListScopesToTeacher();
         await testAdminReminderListScopesToAcademyOnly();
+        testTeacherDashboardIncludesHomeworkTrackerCard();
+        testIndexIncludesHomeworkReminderDispatchInterval();
         await testManualFlowSkipsSecondMessageWithoutCleanHomework();
         await testManualFlowAddsSecondMessageAndPreservesTranscriptId();
         await testManualFlowNormalizesStudentUserIdToStudentRecordId();

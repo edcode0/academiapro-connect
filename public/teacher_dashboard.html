@@ -268,6 +268,49 @@
             color: #991b1b;
         }
 
+        .stacked-cards {
+            display: grid;
+            gap: 1.25rem;
+        }
+
+        .homework-reminder-item {
+            border: 1px solid var(--border);
+            border-radius: 0.9rem;
+            padding: 1rem;
+            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+        }
+
+        .homework-reminder-name {
+            font-weight: 700;
+            color: #0f172a;
+        }
+
+        .homework-reminder-meta {
+            font-size: 0.9rem;
+            color: #475569;
+            margin-top: 0.35rem;
+        }
+
+        .homework-reminder-schedule {
+            font-size: 0.85rem;
+            color: #64748b;
+            margin-top: 0.35rem;
+        }
+
+        .homework-reminder-status {
+            font-size: 0.85rem;
+            color: #1d4ed8;
+            margin-top: 0.35rem;
+            font-weight: 600;
+        }
+
+        .empty-state-copy {
+            color: #94a3b8;
+            font-size: 0.875rem;
+            text-align: center;
+            padding: 1rem 0;
+        }
+
         @media (max-width: 1024px) {
             .stats-grid {
                 grid-template-columns: repeat(2, 1fr);
@@ -505,6 +548,13 @@
                 <div id="activity-feed" style="padding: 1.5rem;"></div>
             </div>
         </div>
+
+        <div class="card" id="homework-tracker-card" style="margin-top: 2rem;">
+            <div class="card-header">
+                <h3>📚 Seguimiento de deberes</h3>
+            </div>
+            <div id="homework-tracker-list" style="padding: 1.5rem;"></div>
+        </div>
     </main>
 
     <!-- Session Modal -->
@@ -602,6 +652,39 @@
             main.insertBefore(el, main.querySelector('.stats-grid') || main.children[1]);
         }
 
+        function parseHomeworkItems(rawHomework) {
+            try {
+                const parsed = JSON.parse(rawHomework || '[]');
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (_) {
+                return [];
+            }
+        }
+
+        function getHomeworkWeekdayLabel(day) {
+            const labels = {
+                monday: 'Lunes',
+                tuesday: 'Martes',
+                wednesday: 'Miércoles',
+                thursday: 'Jueves',
+                friday: 'Viernes',
+                saturday: 'Sábado',
+                sunday: 'Domingo'
+            };
+            return labels[day] || 'Sin día';
+        }
+
+        function getHomeworkStatusLabel(status) {
+            const labels = {
+                pending_schedule: 'Pendiente de programar',
+                scheduled: 'Programado',
+                no_homework: 'No tengo deberes',
+                not_done: 'No los he hecho',
+                done: 'Ya los he hecho'
+            };
+            return labels[status] || status;
+        }
+
         const ADMIN_NAV_HTML = `
             <div class="nav-section-title">Gestión de Academia</div>
             <a href="/">🏠 Dashboard</a>
@@ -694,6 +777,28 @@
                 console.error('Students load error:', e);
                 document.getElementById('students-table').innerHTML =
                     '<tr><td colspan="5" style="text-align:center;color:#991b1b;padding:2rem;">⚠️ Error al cargar la lista de alumnos</td></tr>';
+            }
+
+            try {
+                const hwTeacherRes = await fetch('/api/teacher/homework-reminders', { credentials: 'include' });
+                const hwTeacher = hwTeacherRes.ok ? await hwTeacherRes.json() : [];
+                document.getElementById('homework-tracker-list').innerHTML = hwTeacher.length
+                    ? `<div class="stacked-cards">${hwTeacher.map(r => {
+                        const homeworkItems = parseHomeworkItems(r.homework_json);
+                        return `
+                            <div class="homework-reminder-item">
+                                <div class="homework-reminder-name">${r.student_name}</div>
+                                <div class="homework-reminder-meta">${homeworkItems.length ? homeworkItems.join(', ') : 'Sin deberes guardados'}</div>
+                                <div class="homework-reminder-schedule">${getHomeworkWeekdayLabel(r.scheduled_day_of_week)} · ${r.scheduled_time || 'Sin hora'}</div>
+                                <div class="homework-reminder-status">Estado: ${getHomeworkStatusLabel(r.status)}</div>
+                            </div>
+                        `;
+                    }).join('')}</div>`
+                    : '<p class="empty-state-copy">Aún no hay respuestas de deberes para revisar.</p>';
+            } catch (e) {
+                console.error('Homework tracker load error:', e);
+                document.getElementById('homework-tracker-list').innerHTML =
+                    '<p class="empty-state-copy" style="color:#991b1b;">⚠️ Error al cargar el seguimiento de deberes</p>';
             }
         }
         // --- Session Modal Logic ---

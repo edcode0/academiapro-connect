@@ -464,6 +464,9 @@ async function runTests() {
         check('GET /api/notifications -> 200', list.status === 200, `status=${list.status}`);
         check('Returns array', Array.isArray(list.body), `type=${typeof list.body}`);
 
+        const teacherHw = await request('GET', '/api/teacher/homework-reminders', { cookie: ownerCookie });
+        check('GET /api/teacher/homework-reminders -> 200 or 403 by role', [200, 403].includes(teacherHw.status), `status=${teacherHw.status}`);
+
         const markAll = await request('POST', '/api/notifications/mark-all-read', { cookie: ownerCookie });
         check('POST /api/notifications/mark-all-read -> 200', markAll.status === 200, `status=${markAll.status}`);
         check('mark-all-read returns success', markAll.body?.success === true, hint(markAll.body));

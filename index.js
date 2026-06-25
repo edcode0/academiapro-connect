@@ -543,6 +543,40 @@ db.initDb().then(async () => {
                 console.error('[Calendar] Class reminder error:', err.message);
             }
         }, 60 * 1000);
+
+        setInterval(async () => {
+            try {
+                const now = new Date().toISOString();
+                const homeworkNowSql = db.isPostgres ? 'NOW()' : "datetime('now')";
+                const due = await db.query(`
+                    SELECT id, academy_id, student_id, scheduled_for
+                    FROM homework_reminders
+                    WHERE status = 'scheduled'
+                      AND reminder_sent = FALSE
+                      AND scheduled_for IS NOT NULL
+                      AND scheduled_for <= $1
+                `, [now]);
+
+                for (const reminder of (due.rows || [])) {
+                    const studentRow = await db.query('SELECT user_id FROM students WHERE id = $1', [reminder.student_id]);
+                    const studentUserId = studentRow.rows?.[0]?.user_id;
+                    if (!studentUserId) continue;
+
+                    await createNotification(
+                        studentUserId,
+                        reminder.academy_id,
+                        'homework_reminder',
+                        '📚 Es la hora de hacer tus deberes',
+                        'Abre la app para marcar si los has hecho',
+                        `/student-portal?homeworkReminder=${reminder.id}`
+                    );
+
+                    await db.query(`UPDATE homework_reminders SET reminder_sent = TRUE, updated_at = ${homeworkNowSql} WHERE id = $1`, [reminder.id]);
+                }
+            } catch (err) {
+                console.error('[Homework] Reminder dispatch error:', err.message);
+            }
+        }, 60 * 1000);
     });
 }).catch(err => {
     console.error('Failed to initialize database:', err);

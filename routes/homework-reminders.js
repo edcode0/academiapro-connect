@@ -3,6 +3,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
+const { createNotification } = require('../notifications');
 const { authenticateJWT } = require('../middleware/auth');
 const { requireTeacherOrAdmin, requireStudent } = require('../middleware/roles');
 const {
@@ -72,7 +73,7 @@ router.post('/api/student/homework-reminders/:id/respond', authenticateJWT, requ
         }
 
         const owned = await db.query(
-            `SELECT hr.id
+            `SELECT hr.id, hr.teacher_id
              FROM homework_reminders hr
              JOIN students s ON s.id = hr.student_id
              WHERE hr.id = $1 AND s.user_id = $2 AND hr.academy_id = $3`,
@@ -88,6 +89,19 @@ router.post('/api/student/homework-reminders/:id/respond', authenticateJWT, requ
              WHERE id = $2`,
             [status, req.params.id]
         );
+
+        const teacherId = owned.rows[0].teacher_id;
+        if (teacherId) {
+            await createNotification(
+                teacherId,
+                req.user.academy_id,
+                'homework_status',
+                `📚 ${req.user.name} ha actualizado sus deberes`,
+                status === 'done' ? 'Marcó que ya los ha hecho' : status === 'not_done' ? 'Marcó que no los ha hecho' : 'Marcó que no tenía deberes',
+                '/teacher/dashboard?tab=homework'
+            );
+        }
+
         res.json({ success: true });
     } catch (err) {
         next(err);
