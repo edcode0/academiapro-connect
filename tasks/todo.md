@@ -2,6 +2,15 @@
 
 ---
 
+## SPRINT 2026-06-25 — Recordatorios de deberes desde transcripciones ✅ COMPLETO
+
+| Feature | Estado | Notas |
+|---------|--------|-------|
+| F4 - Recordatorios de deberes V1 | ✅ Completo | Tabla `homework_reminders`, scheduling alumno, notificación interna, bandeja profesor |
+| F5 - Push móvil accionable V2 | 📌 Backlog | Notificación push real con acciones `No tengo deberes`, `No los he hecho`, `Ya los he hecho` |
+
+---
+
 ## SPRINT 2026-06-09 — 3 Features ✅ COMPLETO
 
 | Feature | Estado | Archivos |
