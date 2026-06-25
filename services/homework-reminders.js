@@ -1,6 +1,16 @@
 'use strict';
 
 const db = require('../db');
+const DEFAULT_TIMEZONE = process.env.HOMEWORK_REMINDER_TIMEZONE || process.env.APP_TIMEZONE || 'Europe/Madrid';
+const WEEKDAYS = {
+    sunday: 0,
+    monday: 1,
+    tuesday: 2,
+    wednesday: 3,
+    thursday: 4,
+    friday: 5,
+    saturday: 6
+};
 
 function normalizeHomeworkList(items) {
     const seen = new Set();
@@ -15,30 +25,92 @@ function normalizeHomeworkList(items) {
         });
 }
 
-function computeNextScheduledFor(dayOfWeek, time, now = new Date()) {
-    const weekdays = {
-        sunday: 0,
-        monday: 1,
-        tuesday: 2,
-        wednesday: 3,
-        thursday: 4,
-        friday: 5,
-        saturday: 6
-    };
-    const [hours, minutes] = String(time || '').split(':').map(Number);
-    const targetDay = weekdays[String(dayOfWeek || '').toLowerCase()];
-    if (!Number.isInteger(hours) || !Number.isInteger(minutes) || targetDay == null) {
+function parseSchedule(dayOfWeek, time) {
+    const normalizedDay = String(dayOfWeek || '').toLowerCase();
+    const targetDay = WEEKDAYS[normalizedDay];
+    const match = /^(\d{2}):(\d{2})$/.exec(String(time || ''));
+    if (!match || targetDay == null) {
         throw new Error('Invalid schedule');
     }
 
-    const next = new Date(now);
-    next.setSeconds(0, 0);
-    next.setHours(hours, minutes, 0, 0);
+    const hours = Number(match[1]);
+    const minutes = Number(match[2]);
+    if (hours > 23 || minutes > 59) {
+        throw new Error('Invalid schedule');
+    }
 
-    let delta = targetDay - next.getDay();
-    if (delta < 0 || (delta === 0 && next <= now)) delta += 7;
-    next.setDate(next.getDate() + delta);
-    return next;
+    return { hours, minutes, targetDay };
+}
+
+function getZonedDateParts(date, timeZone = DEFAULT_TIMEZONE) {
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        weekday: 'long',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hourCycle: 'h23'
+    }).formatToParts(date);
+    const values = {};
+    for (const part of parts) {
+        if (part.type !== 'literal') values[part.type] = part.value;
+    }
+
+    return {
+        weekday: String(values.weekday || '').toLowerCase(),
+        year: Number(values.year),
+        month: Number(values.month),
+        day: Number(values.day),
+        hour: Number(values.hour),
+        minute: Number(values.minute),
+        second: Number(values.second)
+    };
+}
+
+function zonedTimeToUtc(year, month, day, hours, minutes, timeZone = DEFAULT_TIMEZONE) {
+    const desiredUtcShape = Date.UTC(year, month - 1, day, hours, minutes, 0);
+    let guess = desiredUtcShape;
+
+    for (let i = 0; i < 4; i += 1) {
+        const actual = getZonedDateParts(new Date(guess), timeZone);
+        const actualUtcShape = Date.UTC(actual.year, actual.month - 1, actual.day, actual.hour, actual.minute, actual.second);
+        const diff = desiredUtcShape - actualUtcShape;
+        if (diff === 0) return new Date(guess);
+        guess += diff;
+    }
+
+    return new Date(guess);
+}
+
+function computeNextScheduledFor(dayOfWeek, time, now = new Date(), timeZone = DEFAULT_TIMEZONE) {
+    const { hours, minutes, targetDay } = parseSchedule(dayOfWeek, time);
+    const current = getZonedDateParts(now, timeZone);
+    const currentDay = WEEKDAYS[current.weekday];
+    if (currentDay == null) {
+        throw new Error('Invalid schedule');
+    }
+
+    let delta = targetDay - currentDay;
+    if (
+        delta < 0 ||
+        (delta === 0 && (hours < current.hour || (hours === current.hour && minutes <= current.minute)))
+    ) {
+        delta += 7;
+    }
+
+    const localDate = new Date(Date.UTC(current.year, current.month - 1, current.day));
+    localDate.setUTCDate(localDate.getUTCDate() + delta);
+    return zonedTimeToUtc(
+        localDate.getUTCFullYear(),
+        localDate.getUTCMonth() + 1,
+        localDate.getUTCDate(),
+        hours,
+        minutes,
+        timeZone
+    );
 }
 
 function canScheduleReminder(reminder) {
@@ -112,6 +184,42 @@ async function createHomeworkReminderFromTranscript({
     };
 }
 
+async function dispatchDueHomeworkReminders({
+    dbRunner = db,
+    createNotificationFn,
+    now = new Date()
+} = {}) {
+    const reminderNowSql = db.isPostgres ? 'NOW()' : "datetime('now')";
+    const due = await dbRunner.query(
+        `SELECT hr.id, hr.academy_id, s.user_id AS student_user_id
+         FROM homework_reminders hr
+         JOIN students s ON s.id = hr.student_id
+         WHERE hr.status = 'scheduled'
+           AND hr.reminder_sent = FALSE
+           AND hr.scheduled_for IS NOT NULL
+           AND hr.scheduled_for <= $1`,
+        [now.toISOString()]
+    );
+
+    for (const reminder of (due.rows || [])) {
+        if (!reminder.student_user_id) continue;
+
+        await createNotificationFn(
+            reminder.student_user_id,
+            reminder.academy_id,
+            'homework_reminder',
+            '📚 Es la hora de hacer tus deberes',
+            'Abre la app para marcar si los has hecho',
+            `/student-portal?homeworkReminder=${reminder.id}`
+        );
+
+        await dbRunner.query(
+            `UPDATE homework_reminders SET reminder_sent = TRUE, updated_at = ${reminderNowSql} WHERE id = $1`,
+            [reminder.id]
+        );
+    }
+}
+
 module.exports = {
     normalizeHomeworkList,
     computeNextScheduledFor,
@@ -120,5 +228,6 @@ module.exports = {
     getTranscriptIdForReminder,
     validateHomeworkResponseStatus,
     buildHomeworkReminderPrompt,
-    createHomeworkReminderFromTranscript
+    createHomeworkReminderFromTranscript,
+    dispatchDueHomeworkReminders
 };

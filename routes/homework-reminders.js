@@ -73,7 +73,7 @@ router.post('/api/student/homework-reminders/:id/respond', authenticateJWT, requ
         }
 
         const owned = await db.query(
-            `SELECT hr.id, hr.teacher_id
+            `SELECT hr.id, s.assigned_teacher_id AS teacher_id
              FROM homework_reminders hr
              JOIN students s ON s.id = hr.student_id
              WHERE hr.id = $1 AND s.user_id = $2 AND hr.academy_id = $3`,
@@ -101,6 +101,13 @@ router.post('/api/student/homework-reminders/:id/respond', authenticateJWT, requ
                     status === 'done' ? 'Marcó que ya los ha hecho' : status === 'not_done' ? 'Marcó que no los ha hecho' : 'Marcó que no tenía deberes',
                     '/teacher/dashboard?tab=homework'
                 );
+                await db.query(
+                    `UPDATE homework_reminders
+                     SET teacher_notified_at = ${nowSql},
+                         updated_at = ${nowSql}
+                     WHERE id = $1`,
+                    [req.params.id]
+                );
             } catch (notifyErr) {
                 console.error('[Homework] Teacher notification error:', notifyErr.message);
             }
@@ -118,7 +125,7 @@ router.get('/api/teacher/homework-reminders', authenticateJWT, requireTeacherOrA
             ? `SELECT hr.*, s.name as student_name
                FROM homework_reminders hr
                JOIN students s ON s.id = hr.student_id
-               WHERE hr.academy_id = $1 AND hr.teacher_id = $2
+               WHERE hr.academy_id = $1 AND s.assigned_teacher_id = $2
                ORDER BY hr.updated_at DESC, hr.created_at DESC`
             : `SELECT hr.*, s.name as student_name
                FROM homework_reminders hr

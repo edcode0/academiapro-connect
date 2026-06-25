@@ -252,6 +252,13 @@ async function testServiceHelpers() {
 
     const next = service.computeNextScheduledFor('wednesday', '18:30', new Date('2026-06-23T10:00:00Z'));
     assert.ok(next instanceof Date);
+    assert.strictEqual(
+        service.computeNextScheduledFor('wednesday', '18:30', new Date('2026-06-23T10:00:00Z'), 'Europe/Madrid').toISOString(),
+        '2026-06-24T16:30:00.000Z'
+    );
+    assert.throws(() => service.computeNextScheduledFor('wednesday', '24:00'), /Invalid schedule/);
+    assert.throws(() => service.computeNextScheduledFor('wednesday', '18:99'), /Invalid schedule/);
+    assert.throws(() => service.computeNextScheduledFor('wednesday', '9:30'), /Invalid schedule/);
     assert.strictEqual(service.canScheduleReminder({ status: 'pending_schedule' }), true);
     assert.strictEqual(service.canScheduleReminder({ status: 'done' }), false);
     assert.strictEqual(service.shouldCreateReminderFromProcessed({ deberes: [] }), false);
@@ -444,16 +451,20 @@ async function testStudentRespondUpdatesOwnedReminder() {
 }
 
 async function testStudentRespondNotifiesTeacherInbox() {
-    let updateParams = null;
+    const updates = [];
     const notificationCalls = [];
     const dbMock = createMockDb({
         async query(sql, params) {
-            if (sql.includes('SELECT hr.id') && sql.includes('JOIN students s ON s.id = hr.student_id')) {
+            if (sql.includes('SELECT hr.id') && sql.includes('assigned_teacher_id')) {
                 assert.deepStrictEqual(params, ['10', 55, 3]);
                 return { rows: [{ id: 10, teacher_id: 7 }] };
             }
             if (sql.includes('UPDATE homework_reminders') && sql.includes('student_response_at = NOW()')) {
-                updateParams = params;
+                updates.push({ sql, params });
+                return { rows: [], rowCount: 1 };
+            }
+            if (sql.includes('UPDATE homework_reminders') && sql.includes('teacher_notified_at = NOW()')) {
+                updates.push({ sql, params });
                 return { rows: [], rowCount: 1 };
             }
             throw new Error(`Unexpected SQL in teacher inbox notify test: ${sql}`);
@@ -478,7 +489,7 @@ async function testStudentRespondNotifiesTeacherInbox() {
 
     await handler(req, res, err => { throw err; });
 
-    assert.deepStrictEqual(updateParams, ['not_done', '10']);
+    assert.deepStrictEqual(updates.map(entry => entry.params), [['not_done', '10'], ['10']]);
     assert.deepStrictEqual(notificationCalls, [[
         7,
         3,
@@ -495,13 +506,16 @@ async function testStudentRespondSucceedsWhenTeacherNotificationFails() {
     const loggedErrors = [];
     const dbMock = createMockDb({
         async query(sql, params) {
-            if (sql.includes('SELECT hr.id') && sql.includes('JOIN students s ON s.id = hr.student_id')) {
+            if (sql.includes('SELECT hr.id') && sql.includes('assigned_teacher_id')) {
                 assert.deepStrictEqual(params, ['10', 55, 3]);
                 return { rows: [{ id: 10, teacher_id: 7 }] };
             }
             if (sql.includes('UPDATE homework_reminders') && sql.includes('student_response_at = NOW()')) {
                 updateParams = params;
                 return { rows: [], rowCount: 1 };
+            }
+            if (sql.includes('teacher_notified_at = NOW()')) {
+                throw new Error('teacher_notified_at should not be set on notify failure');
             }
             throw new Error(`Unexpected SQL in teacher notify failure test: ${sql}`);
         }
@@ -542,7 +556,7 @@ async function testStudentRespondSucceedsWhenTeacherNotificationFails() {
 async function testTeacherReminderListScopesToTeacher() {
     const dbMock = createMockDb({
         async query(sql, params) {
-            assert.ok(sql.includes('hr.teacher_id = $2'));
+            assert.ok(sql.includes('s.assigned_teacher_id = $2'));
             assert.deepStrictEqual(params, [3, 7]);
             return {
                 rows: [{ id: 22, student_name: 'Ana' }]
@@ -610,11 +624,49 @@ function testTeacherDashboardEscapesHomeworkTrackerValues() {
 function testIndexIncludesHomeworkReminderDispatchInterval() {
     const source = fs.readFileSync(INDEX_PATH, 'utf8');
 
-    assert.ok(source.includes("FROM homework_reminders"));
-    assert.ok(source.includes("type,\n                'homework_reminder'") || source.includes("'homework_reminder'"));
-    assert.ok(source.includes('📚 Es la hora de hacer tus deberes'));
-    assert.ok(source.includes('/student-portal?homeworkReminder=${reminder.id}'));
-    assert.ok(source.includes('UPDATE homework_reminders SET reminder_sent = TRUE'));
+    assert.ok(source.includes('dispatchDueHomeworkReminders'));
+}
+
+async function testDispatchDueHomeworkRemindersSendsAndMarksDueItems() {
+    const notifications = [];
+    const updates = [];
+    const dbMock = createMockDb({
+        async query(sql, params) {
+            if (sql.includes('FROM homework_reminders hr') && sql.includes('s.user_id AS student_user_id')) {
+                assert.deepStrictEqual(params, ['2026-06-25T16:30:00.000Z']);
+                return {
+                    rows: [
+                        { id: 10, academy_id: 3, student_user_id: 55 },
+                        { id: 11, academy_id: 3, student_user_id: null }
+                    ]
+                };
+            }
+            if (sql.includes('UPDATE homework_reminders SET reminder_sent = TRUE')) {
+                updates.push(params);
+                return { rows: [], rowCount: 1 };
+            }
+            throw new Error(`Unexpected SQL in dispatch test: ${sql}`);
+        }
+    });
+    const service = loadHomeworkReminderService(dbMock);
+
+    await service.dispatchDueHomeworkReminders({
+        dbRunner: dbMock,
+        createNotificationFn: async (...args) => {
+            notifications.push(args);
+        },
+        now: new Date('2026-06-25T16:30:00.000Z')
+    });
+
+    assert.deepStrictEqual(notifications, [[
+        55,
+        3,
+        'homework_reminder',
+        '📚 Es la hora de hacer tus deberes',
+        'Abre la app para marcar si los has hecho',
+        '/student-portal?homeworkReminder=10'
+    ]]);
+    assert.deepStrictEqual(updates, [[10]]);
 }
 
 async function testManualFlowSkipsSecondMessageWithoutCleanHomework() {
@@ -1118,6 +1170,7 @@ async function run() {
         testTeacherDashboardIncludesHomeworkTrackerCard();
         testTeacherDashboardEscapesHomeworkTrackerValues();
         testIndexIncludesHomeworkReminderDispatchInterval();
+        await testDispatchDueHomeworkRemindersSendsAndMarksDueItems();
         await testManualFlowSkipsSecondMessageWithoutCleanHomework();
         await testManualFlowAddsSecondMessageAndPreservesTranscriptId();
         await testManualFlowNormalizesStudentUserIdToStudentRecordId();
