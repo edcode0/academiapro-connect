@@ -75,3 +75,65 @@ homework-reminders tests passed
 ## Concerns
 
 - `routes/transcripts.js`, `services/gmail.js`, and `public/transcripts.html` already had local uncommitted edits before this task started. I worked with those changes in place and did not revert them.
+
+---
+
+## Reviewer fix pass
+
+### What I fixed
+
+- Restored the original primary transcript chat message format in `routes/transcripts.js` so Task 2 only adds the second CTA reminder message.
+- Restored the original primary Gmail transcript chat message format in `services/gmail.js` so the CTA reminder remains additive only.
+- Preserved transcript linkage for history resend by returning `transcript_id` in `/api/transcripts/history` and carrying it through `public/transcripts.html` when a historical transcript is reopened and re-sent.
+- Added focused helper coverage in `tests/homework-reminders.js` for:
+  - rejecting empty/whitespace-only homework lists
+  - preserving a processed `transcript_id`
+  - falling back to a supplied transcript id when the processed payload does not already contain one
+- Added `getTranscriptIdForReminder(processed, fallbackTranscriptId)` to `services/homework-reminders.js` and used it inside reminder creation so resend/history flows keep transcript linkage.
+
+### Reviewer fix TDD evidence
+
+1. RED:
+   - Command: `node tests/homework-reminders.js`
+   - Result: FAIL
+   - Output:
+
+```text
+/Users/edu/Desktop/app academy/AcademiaPro/tests/homework-reminders.js:31
+    assert.strictEqual(getTranscriptIdForReminder({ transcript_id: 42 }), 42);
+                       ^
+
+TypeError: getTranscriptIdForReminder is not a function
+```
+
+2. GREEN:
+   - Command: `node tests/homework-reminders.js`
+   - Result: PASS
+   - Output:
+
+```text
+[dotenv@17.3.1] injecting env (8) from .env -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+Using PostgreSQL (Railway)
+homework-reminders tests passed
+```
+
+3. Follow-up syntax verification:
+   - Command: `node --check services/homework-reminders.js`
+   - Result: PASS
+   - Command: `node --check routes/transcripts.js`
+   - Result: PASS
+   - Command: `node --check services/gmail.js`
+   - Result: PASS
+
+### Files updated in reviewer fix pass
+
+- `services/homework-reminders.js`
+- `routes/transcripts.js`
+- `services/gmail.js`
+- `public/transcripts.html`
+- `tests/homework-reminders.js`
+
+### Additional self-review findings
+
+- Reminder CTA creation still only happens when normalized homework items remain after trimming, so blank entries do not generate a second message.
+- History resend now preserves transcript linkage by explicitly injecting `transcript_id` into the client-side summary payload before `send-to-chat`.

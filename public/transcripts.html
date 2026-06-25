@@ -601,8 +601,9 @@
         let lastProcessedJson = null;
         let currentStudentId = null;
 
-        function storeLastProcessedJson(data) {
-            lastProcessedJson = data ? { ...data, transcript_id: data.transcript_id || null } : null;
+        function storeLastProcessedJson(data, fallbackTranscriptId = null) {
+            const transcriptId = data?.transcript_id ?? fallbackTranscriptId ?? null;
+            lastProcessedJson = data ? { ...data, transcript_id: transcriptId } : null;
         }
 
         async function init() {
@@ -648,12 +649,16 @@
             const data = await res.json();
             const tbody = document.getElementById('historyTable');
             tbody.innerHTML = data.map(t => {
-                const js = btoa(encodeURIComponent(t.processed_json));
+                const parsed = JSON.parse(t.processed_json || '{}');
+                const js = btoa(encodeURIComponent(JSON.stringify({
+                    ...parsed,
+                    transcript_id: parsed.transcript_id ?? t.transcript_id ?? t.id ?? null
+                })));
                 return `
                 <tr>
                     <td>${new Date(t.created_at).toLocaleDateString()}</td>
                     <td style="font-weight: 500;">${t.student_name}</td>
-                    <td><button class="btn btn-outline" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="viewHistory('${js}', ${t.student_id})">Ver resumen</button></td>
+                    <td><button class="btn btn-outline" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="viewHistory('${js}', ${t.student_id}, ${t.transcript_id || t.id})">Ver resumen</button></td>
                 </tr>
             `}).join('');
         }
@@ -752,11 +757,11 @@
             document.getElementById('motResult').textContent = data.mensaje_motivador || '';
         }
 
-        function viewHistory(b64json, student_id) {
+        function viewHistory(b64json, student_id, transcript_id) {
             try {
                 const raw = decodeURIComponent(atob(b64json));
                 const parsed = JSON.parse(raw);
-                storeLastProcessedJson(parsed);
+                storeLastProcessedJson(parsed, transcript_id);
                 currentStudentId = student_id;
                 document.getElementById('studentSelect').value = student_id;
                 renderResults(parsed);

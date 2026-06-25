@@ -5,7 +5,8 @@ const {
     normalizeHomeworkList,
     computeNextScheduledFor,
     canScheduleReminder,
-    shouldCreateReminderFromProcessed
+    shouldCreateReminderFromProcessed,
+    getTranscriptIdForReminder
 } = require('../services/homework-reminders');
 
 function run() {
@@ -20,9 +21,15 @@ function run() {
     assert.strictEqual(canScheduleReminder({ status: 'done' }), false);
     assert.strictEqual(shouldCreateReminderFromProcessed({ deberes: [] }), false);
     assert.strictEqual(
+        shouldCreateReminderFromProcessed({ deberes: ['   ', '\n'] }),
+        false
+    );
+    assert.strictEqual(
         shouldCreateReminderFromProcessed({ deberes: ['repasar matrices'] }),
         true
     );
+    assert.strictEqual(getTranscriptIdForReminder({ transcript_id: 42 }), 42);
+    assert.strictEqual(getTranscriptIdForReminder({}, 17), 17);
 }
 
 run();

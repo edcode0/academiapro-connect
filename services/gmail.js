@@ -3,7 +3,6 @@
 const { google }             = require('googleapis');
 const db                     = require('../db');
 const groqClient             = require('./groq');
-const { buildTranscriptChatMessage } = require('./transcript-message');
 const {
     createHomeworkReminderFromTranscript,
     buildHomeworkReminderPrompt
@@ -234,9 +233,14 @@ module.exports = function makeGmailService(io) {
                 }
 
                 // Build and save chat message
-                const chatMessage = buildTranscriptChatMessage(analysisData, {
-                    googleTranscriptUrl: recordingLink
-                });
+                const d = analysisData;
+                const chatMessage =
+                    `📚 *Resumen de tu clase*\n\n${d.resumen || d.summary || ''}\n\n` +
+                    `📝 *Deberes:*\n${(d.deberes || d.homework || []).map(x => '• ' + x).join('\n') || '• Sin deberes'}\n\n` +
+                    `💡 *Conceptos:*\n${(d.conceptos_clave || d.topics_covered || []).map(x => '• ' + x).join('\n')}\n\n` +
+                    `🎯 *Consejos:*\n${(d.pistas_profesor || d.key_points || []).map(x => '• ' + x).join('\n')}\n\n` +
+                    `💪 ${d.mensaje_motivador || d.teacher_notes || ''}` +
+                    (recordingLink ? `\n\n🎥 *Grabación de la clase:*\n${recordingLink}` : '');
 
                 await db.query(
                     isPostgres

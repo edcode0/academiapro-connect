@@ -49,6 +49,11 @@ function shouldCreateReminderFromProcessed(processed = {}) {
     return normalizeHomeworkList(processed.deberes || processed.homework || []).length > 0;
 }
 
+function getTranscriptIdForReminder(processed = {}, fallbackTranscriptId = null) {
+    const transcriptId = processed.transcript_id ?? fallbackTranscriptId;
+    return transcriptId == null || transcriptId === '' ? null : transcriptId;
+}
+
 function escapeHtml(value) {
     return String(value)
         .replace(/&/g, '&amp;')
@@ -77,6 +82,7 @@ async function createHomeworkReminderFromTranscript({
 }) {
     const homeworkList = normalizeHomeworkList(processed.deberes || processed.homework || []);
     if (!homeworkList.length) return null;
+    const reminderTranscriptId = getTranscriptIdForReminder(processed, transcriptId);
 
     const insertSql = db.isPostgres
         ? `INSERT INTO homework_reminders
@@ -90,7 +96,7 @@ async function createHomeworkReminderFromTranscript({
         academyId,
         studentId,
         teacherId,
-        transcriptId,
+        reminderTranscriptId,
         'transcript',
         JSON.stringify(homeworkList)
     ]);
@@ -106,6 +112,7 @@ module.exports = {
     computeNextScheduledFor,
     canScheduleReminder,
     shouldCreateReminderFromProcessed,
+    getTranscriptIdForReminder,
     buildHomeworkReminderPrompt,
     createHomeworkReminderFromTranscript
 };

@@ -10,7 +10,6 @@ const db        = require('../db');
 const { google } = require('googleapis');
 const groqClient             = require('../services/groq');
 const { makeOAuth2Client }   = require('../services/calendar');
-const { buildTranscriptChatMessage } = require('../services/transcript-message');
 const {
     createHomeworkReminderFromTranscript,
     buildHomeworkReminderPrompt
@@ -346,9 +345,11 @@ ${transcriptForAI}`;
                 s = { resumen: String(summary), deberes: [], conceptos_clave: [], pistas_profesor: [], mensaje_motivador: '' };
             }
 
-            const messageText = buildTranscriptChatMessage(s, {
-                googleTranscriptUrl: google_transcript_url || googleTranscriptUrl || s.google_transcript_url || s.recording_link || null
-            });
+            const messageText = `📚 *Resumen de tu clase de hoy*\n\n${s.resumen || ''}\n\n` +
+                `📝 *Deberes para casa:*\n${(s.deberes || []).map(d => '• ' + d).join('\n')}\n\n` +
+                `💡 *Conceptos importantes:*\n${(s.conceptos_clave || []).map(c => '• ' + c).join('\n')}\n\n` +
+                `🎯 *Consejos de tu profe:*\n${(s.pistas_profesor || []).map(p => '• ' + p).join('\n')}\n\n` +
+                `💪 ${s.mensaje_motivador || ''}`;
 
             // Step 4: Save message
             const insertMsgSql = isPostgres
@@ -464,7 +465,7 @@ ${transcriptForAI}`;
 
     router.get('/api/transcripts/history', authenticateJWT, requireTeacherOrAdmin, (req, res, next) => {
         let q = `
-            SELECT t.id, t.created_at, t.processed_json, t.student_id, s.name as student_name
+            SELECT t.id, t.id AS transcript_id, t.created_at, t.processed_json, t.student_id, s.name as student_name
             FROM transcripts t
             JOIN students s ON t.student_id = s.id
             WHERE t.academy_id = $1
