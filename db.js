@@ -321,6 +321,24 @@ async function initDb() {
             is_booked BOOLEAN DEFAULT FALSE,
             student_id INTEGER,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`,
+    `CREATE TABLE IF NOT EXISTS homework_reminders (
+            id ${idType},
+            academy_id INTEGER NOT NULL,
+            student_id INTEGER NOT NULL,
+            teacher_id INTEGER NOT NULL,
+            transcript_id INTEGER,
+            source TEXT DEFAULT 'transcript',
+            homework_json TEXT NOT NULL,
+            scheduled_day_of_week TEXT,
+            scheduled_time TEXT,
+            scheduled_for TIMESTAMP,
+            status TEXT DEFAULT 'pending_schedule',
+            reminder_sent BOOLEAN DEFAULT FALSE,
+            student_response_at TIMESTAMP,
+            teacher_notified_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )`
   ];
 
@@ -383,6 +401,25 @@ async function initDb() {
       is_booked INTEGER DEFAULT 0,
       student_id INTEGER,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+
+    `CREATE TABLE IF NOT EXISTS homework_reminders (
+      id ${idType},
+      academy_id INTEGER NOT NULL,
+      student_id INTEGER NOT NULL,
+      teacher_id INTEGER NOT NULL,
+      transcript_id INTEGER,
+      source TEXT DEFAULT 'transcript',
+      homework_json TEXT NOT NULL,
+      scheduled_day_of_week TEXT,
+      scheduled_time TEXT,
+      scheduled_for TIMESTAMP,
+      status TEXT DEFAULT 'pending_schedule',
+      reminder_sent BOOLEAN DEFAULT FALSE,
+      student_response_at TIMESTAMP,
+      teacher_notified_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`,
 
     `CREATE TABLE IF NOT EXISTS settings (
