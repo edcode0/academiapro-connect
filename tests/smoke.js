@@ -399,6 +399,10 @@ async function runTests() {
 
             const reports = await request('GET', '/api/student/reports', { cookie: studentCookie });
             check('GET /api/student/reports (student) -> 200', reports.status === 200, `status=${reports.status}`);
+
+            const hwRes = await request('GET', '/api/student/homework-reminders', { cookie: studentCookie });
+            check('GET /api/student/homework-reminders -> 200', hwRes.status === 200, `status=${hwRes.status}`);
+            check('Homework reminders response is array', Array.isArray(hwRes.body), `type=${typeof hwRes.body}`);
         } else {
             warn('No studentCookie - skipping student portal checks');
         }

@@ -359,6 +359,63 @@
         .notif-msg { font-size: 12px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .notif-time { font-size: 11px; color: #94a3b8; margin-top: 2px; }
         .notif-empty { padding: 32px 16px; text-align: center; color: #94a3b8; font-size: 13px; }
+        .homework-reminder-item {
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+            transition: box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+        }
+        .homework-reminder-item:last-child { margin-bottom: 0; }
+        .homework-reminder-item.highlighted {
+            border-color: #3b82f6;
+            background: #eff6ff;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+        }
+        .homework-reminder-item p { margin-bottom: 0.5rem; }
+        .homework-reminder-item ul {
+            margin: 0 0 0 1.25rem;
+            color: #475569;
+        }
+        .homework-reminder-item li + li { margin-top: 0.25rem; }
+        .homework-reminder-actions {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            margin-top: 0.75rem;
+        }
+        .homework-reminder-actions select,
+        .homework-reminder-actions input,
+        .homework-reminder-actions button {
+            min-height: 40px;
+            border-radius: 10px;
+            border: 1px solid #cbd5e1;
+            font-size: 0.9rem;
+        }
+        .homework-reminder-actions select,
+        .homework-reminder-actions input {
+            background: #fff;
+            color: #1e293b;
+            padding: 0 0.75rem;
+        }
+        .homework-reminder-actions button {
+            background: #2563eb;
+            color: #fff;
+            border-color: #2563eb;
+            padding: 0 1rem;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .homework-reminder-actions button.secondary {
+            background: #fff;
+            color: #1e293b;
+            border-color: #cbd5e1;
+        }
+        .homework-reminder-meta {
+            color: #64748b;
+            font-size: 0.8rem;
+            margin-top: 0.75rem;
+        }
     </style>
     <link rel="stylesheet" href="/glassmorphism.css">
     <link rel="stylesheet" href="/shared-dashboard.css">
@@ -522,6 +579,13 @@
             </div>
         </div>
 
+        <div class="card" id="homework-reminders-card" style="display:none; margin-top: 1.5rem;">
+            <div class="card-header">
+                <h4>📚 Deberes pendientes</h4>
+            </div>
+            <div id="homework-reminders-list"></div>
+        </div>
+
         <div class="card" style="margin-top: 1.5rem;">
             <h4>📝 Resúmenes de mis clases</h4>
             <div id="transcripts-list" style="margin-top: 1rem;">
@@ -551,6 +615,135 @@
     </main>
 
     <script>
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function parseHomeworkItems(homeworkJson) {
+            try {
+                const parsed = JSON.parse(homeworkJson);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (err) {
+                return [];
+            }
+        }
+
+        function getHomeworkReminderLinkId() {
+            const id = new URLSearchParams(window.location.search).get('homeworkReminder');
+            return id ? String(id) : '';
+        }
+
+        function highlightHomeworkReminderFromQuery() {
+            const reminderId = getHomeworkReminderLinkId();
+            if (!reminderId) return;
+
+            const target = document.getElementById(`homework-reminder-${reminderId}`);
+            if (!target) return;
+
+            document.querySelectorAll('.homework-reminder-item.highlighted').forEach(card => {
+                card.classList.remove('highlighted');
+            });
+            target.classList.add('highlighted');
+            target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        function renderHomeworkReminders(reminders) {
+            const card = document.getElementById('homework-reminders-card');
+            const list = document.getElementById('homework-reminders-list');
+            if (!card || !list) return;
+
+            card.style.display = reminders.length ? '' : 'none';
+            list.innerHTML = reminders.map(r => {
+                const reminderId = Number(r.id);
+                const items = parseHomeworkItems(r.homework_json);
+                const meta = r.status === 'scheduled' && r.scheduled_day_of_week && r.scheduled_time
+                    ? `Te lo recordaremos los ${escapeHtml(r.scheduled_day_of_week)} a las ${escapeHtml(String(r.scheduled_time).slice(0, 5))}.`
+                    : '';
+
+                return `
+                    <div class="homework-reminder-item" id="homework-reminder-${reminderId}">
+                        <p style="font-weight:700;">Tienes que hacer estos deberes:</p>
+                        <ul>${items.map(h => `<li>${escapeHtml(h)}</li>`).join('')}</ul>
+                        ${r.status === 'pending_schedule' ? `
+                            <div class="homework-reminder-actions">
+                                <select id="hw-day-${reminderId}">
+                                    <option value="monday">Lunes</option>
+                                    <option value="tuesday">Martes</option>
+                                    <option value="wednesday">Miércoles</option>
+                                    <option value="thursday">Jueves</option>
+                                    <option value="friday">Viernes</option>
+                                    <option value="saturday">Sábado</option>
+                                    <option value="sunday">Domingo</option>
+                                </select>
+                                <input id="hw-time-${reminderId}" type="time" value="18:00">
+                                <button onclick="saveHomeworkReminder(${reminderId})">Guardar recordatorio</button>
+                            </div>` : `
+                            <div class="homework-reminder-actions">
+                                <button class="secondary" onclick="respondHomeworkReminder(${reminderId}, 'no_homework')">No tengo deberes</button>
+                                <button class="secondary" onclick="respondHomeworkReminder(${reminderId}, 'not_done')">No los he hecho</button>
+                                <button onclick="respondHomeworkReminder(${reminderId}, 'done')">Ya los he hecho</button>
+                            </div>`}
+                        ${meta ? `<p class="homework-reminder-meta">${meta}</p>` : ''}
+                    </div>
+                `;
+            }).join('');
+
+            highlightHomeworkReminderFromQuery();
+        }
+
+        async function loadHomeworkReminders() {
+            try {
+                const remindersRes = await fetch('/api/student/homework-reminders', { credentials: 'include' });
+                const reminders = remindersRes.ok ? await remindersRes.json() : [];
+                renderHomeworkReminders(Array.isArray(reminders) ? reminders : []);
+            } catch (err) {
+                renderHomeworkReminders([]);
+            }
+        }
+
+        async function saveHomeworkReminder(id) {
+            const day = document.getElementById(`hw-day-${id}`)?.value;
+            const time = document.getElementById(`hw-time-${id}`)?.value;
+            if (!day || !time) return;
+
+            const res = await fetch(`/api/student/homework-reminders/${id}/schedule`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ day_of_week: day, time })
+            });
+
+            if (!res.ok) {
+                showToast('No se pudo guardar el recordatorio.', 'error');
+                return;
+            }
+
+            showToast('Recordatorio guardado.', 'success');
+            await loadHomeworkReminders();
+        }
+
+        async function respondHomeworkReminder(id, status) {
+            const res = await fetch(`/api/student/homework-reminders/${id}/respond`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ status })
+            });
+
+            if (!res.ok) {
+                showToast('No se pudo guardar tu respuesta.', 'error');
+                return;
+            }
+
+            showToast('Respuesta guardada.', 'success');
+            await loadHomeworkReminders();
+        }
+
         async function loadProfile() {
             try {
                 const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -700,6 +893,8 @@
                     }
                 }
 
+                await loadHomeworkReminders();
+
                 // Links (recursos del profe)
                 if (data.links?.length) {
                     document.getElementById('links-card').style.display = '';
@@ -726,6 +921,8 @@
                 document.querySelectorAll('#mainNav a').forEach(a => {
                     a.classList.toggle('active', a.getAttribute('href') === path);
                 });
+
+                highlightHomeworkReminderFromQuery();
 
             } catch (err) {
                 console.error('loadProfile error:', err.message);
