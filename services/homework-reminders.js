@@ -78,7 +78,8 @@ async function createHomeworkReminderFromTranscript({
     teacherId,
     studentId,
     transcriptId = null,
-    processed = {}
+    processed = {},
+    dbRunner = db
 }) {
     const homeworkList = normalizeHomeworkList(processed.deberes || processed.homework || []);
     if (!homeworkList.length) return null;
@@ -92,7 +93,7 @@ async function createHomeworkReminderFromTranscript({
         : `INSERT INTO homework_reminders
            (academy_id, student_id, teacher_id, transcript_id, source, homework_json)
            VALUES ($1, $2, $3, $4, $5, $6)`;
-    const result = await db.query(insertSql, [
+    const result = await dbRunner.query(insertSql, [
         academyId,
         studentId,
         teacherId,

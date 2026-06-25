@@ -242,6 +242,7 @@ ${transcriptForAI}`;
 
             // Step 1: Resolve student USER id
             let studentUserId = null;
+            let normalizedStudentId = null;
 
             // Try: maybe student_id is already a user id
             const directUser = await db.query(
@@ -256,11 +257,12 @@ ${transcriptForAI}`;
             // If not found, try: student_id is students.id, find linked user
             if (!studentUserId) {
                 const linkedUser = await db.query(
-                    "SELECT user_id FROM students WHERE id = $1 AND academy_id = $2 AND user_id IS NOT NULL",
+                    "SELECT id, user_id FROM students WHERE id = $1 AND academy_id = $2 AND user_id IS NOT NULL",
                     [student_id, academy_id]
                 );
                 const luRows = linkedUser.rows || linkedUser;
                 if (luRows && luRows.length > 0) {
+                    normalizedStudentId = luRows[0].id;
                     studentUserId = luRows[0].user_id;
                 }
             }
@@ -285,6 +287,7 @@ ${transcriptForAI}`;
                             "UPDATE students SET user_id = $1 WHERE id = $2",
                             [studentUserId, student_id]
                         );
+                        normalizedStudentId = Number(student_id);
                     }
                 }
             }
@@ -295,15 +298,23 @@ ${transcriptForAI}`;
                 });
             }
 
-            // Teachers can only message their own assigned students
-            if (req.user.role === 'teacher') {
-                const scopeCheck = await db.query(
+            const scopeCheck = req.user.role === 'teacher'
+                ? await db.query(
                     "SELECT id FROM students WHERE user_id = $1 AND academy_id = $2 AND assigned_teacher_id = $3",
                     [studentUserId, academy_id, req.user.id]
+                )
+                : await db.query(
+                    "SELECT id FROM students WHERE user_id = $1 AND academy_id = $2",
+                    [studentUserId, academy_id]
                 );
-                if (!(scopeCheck.rows || []).length)
+            const scopeRows = scopeCheck.rows || scopeCheck;
+            if (!scopeRows.length) {
+                if (req.user.role === 'teacher') {
                     return res.status(403).json({ error: 'Este alumno no está asignado a ti' });
+                }
+                return res.status(404).json({ error: 'Alumno no encontrado en esta academia' });
             }
+            normalizedStudentId = scopeRows[0].id;
 
             // Step 2: Find or create direct room between sender and studentUserId
             const sqlFindRoom = `
@@ -313,29 +324,6 @@ ${transcriptForAI}`;
                 WHERE r.type = 'direct' AND r.academy_id = $3
                 LIMIT 1
             `;
-
-            const existingRooms = await db.query(sqlFindRoom, [sender_id, studentUserId, academy_id]);
-            const erRows = existingRooms.rows || existingRooms;
-
-            let roomId;
-            if (erRows && erRows.length > 0) {
-                roomId = erRows[0].id;
-            } else {
-                // Create room
-                const insertRoomSql = isPostgres
-                    ? "INSERT INTO rooms (academy_id, type, name, created_at) VALUES ($1, 'direct', 'Direct', NOW()) RETURNING id"
-                    : "INSERT INTO rooms (academy_id, type, name, created_at) VALUES ($1, 'direct', 'Direct', datetime('now'))";
-
-                const newRoom = await db.query(insertRoomSql, [academy_id]);
-                roomId = isPostgres && newRoom.rows ? newRoom.rows[0].id : newRoom.lastID;
-
-                const insertMemberSql = isPostgres
-                    ? "INSERT INTO room_members (room_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING"
-                    : "INSERT OR IGNORE INTO room_members (room_id, user_id) VALUES ($1, $2)";
-
-                await db.query(insertMemberSql, [roomId, sender_id]);
-                await db.query(insertMemberSql, [roomId, studentUserId]);
-            }
 
             // Step 3: Build message
             let s;
@@ -358,21 +346,49 @@ ${transcriptForAI}`;
                 : `INSERT INTO messages (room_id, sender_id, content, academy_id, read, created_at)
                    VALUES ($1, $2, $3, $4, 0, datetime('now'))`;
 
-            await db.query(insertMsgSql, [roomId, sender_id, messageText, academy_id]);
+            const transactionResult = await db.withTransaction(async tx => {
+                const existingRooms = await tx.query(sqlFindRoom, [sender_id, studentUserId, academy_id]);
+                const erRows = existingRooms.rows || existingRooms;
 
-            const reminder = await createHomeworkReminderFromTranscript({
-                academyId: academy_id,
-                teacherId: sender_id,
-                studentId: student_id,
-                transcriptId: s.transcript_id || null,
-                processed: s
+                let roomId;
+                if (erRows && erRows.length > 0) {
+                    roomId = erRows[0].id;
+                } else {
+                    const insertRoomSql = isPostgres
+                        ? "INSERT INTO rooms (academy_id, type, name, created_at) VALUES ($1, 'direct', 'Direct', NOW()) RETURNING id"
+                        : "INSERT INTO rooms (academy_id, type, name, created_at) VALUES ($1, 'direct', 'Direct', datetime('now'))";
+
+                    const newRoom = await tx.query(insertRoomSql, [academy_id]);
+                    roomId = isPostgres && newRoom.rows ? newRoom.rows[0].id : newRoom.lastID;
+
+                    const insertMemberSql = isPostgres
+                        ? "INSERT INTO room_members (room_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING"
+                        : "INSERT OR IGNORE INTO room_members (room_id, user_id) VALUES ($1, $2)";
+
+                    await tx.query(insertMemberSql, [roomId, sender_id]);
+                    await tx.query(insertMemberSql, [roomId, studentUserId]);
+                }
+
+                await tx.query(insertMsgSql, [roomId, sender_id, messageText, academy_id]);
+
+                const reminder = await createHomeworkReminderFromTranscript({
+                    academyId: academy_id,
+                    teacherId: sender_id,
+                    studentId: normalizedStudentId,
+                    transcriptId: s.transcript_id || null,
+                    processed: s,
+                    dbRunner: tx
+                });
+
+                let promptHtml = null;
+                if (reminder) {
+                    promptHtml = buildHomeworkReminderPrompt(reminder.id, reminder.homeworkList);
+                    await tx.query(insertMsgSql, [roomId, sender_id, promptHtml, academy_id]);
+                }
+
+                return { roomId, promptHtml };
             });
-
-            let promptHtml = null;
-            if (reminder) {
-                promptHtml = buildHomeworkReminderPrompt(reminder.id, reminder.homeworkList);
-                await db.query(insertMsgSql, [roomId, sender_id, promptHtml, academy_id]);
-            }
+            const { roomId, promptHtml } = transactionResult;
 
             // Step 5: Emit
             const senderInfo = await db.query('SELECT name FROM users WHERE id = $1', [sender_id]);

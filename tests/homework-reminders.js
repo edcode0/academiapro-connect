@@ -12,6 +12,7 @@ const ROUTES_PATH = path.join(ROOT, 'routes/transcripts.js');
 const GMAIL_PATH = path.join(ROOT, 'services/gmail.js');
 const HTML_PATH = path.join(ROOT, 'public/transcripts.html');
 const QUIET_LOG_PREFIXES = ['[dotenv@', 'Using PostgreSQL', '[Gmail] '];
+const QUIET_ERROR_PREFIXES = ['send-to-chat error:', '[Gmail] Error processing email:'];
 
 function purgeModules(pathsToPurge) {
     for (const targetPath of pathsToPurge) {
@@ -47,46 +48,73 @@ function createMockDb(overrides = {}) {
         transcriptInserts: [],
         roomMemberInserts: [],
         roomInserts: [],
-        updates: []
+        updates: [],
+        transactionCalls: 0
     };
 
-    const db = {
-        isPostgres: true,
-        state,
-        async query(sql, params = []) {
-            if (overrides.query) return overrides.query(sql, params, state);
+    function createQueryImplementation(targetState) {
+        return async function query(sql, params = []) {
+            if (overrides.query) return overrides.query(sql, params, targetState);
 
             if (sql.includes("SELECT id FROM users WHERE id = $1 AND role = 'student'")) return { rows: [] };
-            if (sql.includes('SELECT user_id FROM students WHERE id = $1')) return { rows: [{ user_id: 55 }] };
+            if (sql.includes('SELECT id, user_id FROM students WHERE id = $1')) return { rows: [{ id: 12, user_id: 55 }] };
             if (sql.includes("SELECT id FROM students WHERE user_id = $1")) return { rows: [{ id: 12 }] };
             if (sql.includes('SELECT r.id FROM rooms r')) return { rows: [{ id: 91 }] };
             if (sql.includes('INSERT INTO room_members')) {
-                state.roomMemberInserts.push(params);
+                targetState.roomMemberInserts.push(params);
                 return { rows: [], rowCount: 1 };
             }
             if (sql.includes("INSERT INTO rooms (academy_id, type, name, created_at)")) {
-                state.roomInserts.push(params);
+                targetState.roomInserts.push(params);
                 return { rows: [{ id: 91 }], lastID: 91 };
             }
             if (sql.includes('INSERT INTO messages')) {
-                state.messageInserts.push(params);
+                targetState.messageInserts.push(params);
                 return { rows: [], rowCount: 1 };
             }
             if (sql.includes('INSERT INTO homework_reminders')) {
-                state.reminderInserts.push(params);
+                targetState.reminderInserts.push(params);
                 return { rows: [{ id: 500 }], lastID: 500 };
             }
             if (sql.includes('SELECT name FROM users WHERE id = $1')) return { rows: [{ name: 'Profesora Ada' }] };
             if (sql.includes('INSERT INTO transcripts')) {
-                state.transcriptInserts.push(params);
+                targetState.transcriptInserts.push(params);
                 return { rows: [{ id: 700 }], lastID: 700 };
             }
             if (sql.includes('UPDATE users SET gmail_last_check')) {
-                state.updates.push({ sql, params });
+                targetState.updates.push({ sql, params });
                 return { rows: [], rowCount: 1 };
             }
 
             throw new Error(`Unexpected SQL in test: ${sql}`);
+        };
+    }
+
+    const db = {
+        isPostgres: true,
+        state,
+        query: createQueryImplementation(state),
+        async withTransaction(work) {
+            state.transactionCalls += 1;
+            const txState = {
+                messageInserts: [...state.messageInserts],
+                reminderInserts: [...state.reminderInserts],
+                transcriptInserts: [...state.transcriptInserts],
+                roomMemberInserts: [...state.roomMemberInserts],
+                roomInserts: [...state.roomInserts],
+                updates: [...state.updates]
+            };
+            const tx = {
+                query: createQueryImplementation(txState)
+            };
+            const result = await work(tx);
+            state.messageInserts = txState.messageInserts;
+            state.reminderInserts = txState.reminderInserts;
+            state.transcriptInserts = txState.transcriptInserts;
+            state.roomMemberInserts = txState.roomMemberInserts;
+            state.roomInserts = txState.roomInserts;
+            state.updates = txState.updates;
+            return result;
         }
     };
 
@@ -256,6 +284,7 @@ async function testManualFlowSkipsSecondMessageWithoutCleanHomework() {
     assert.strictEqual(res.statusCode, 200);
     assert.strictEqual(dbMock.state.messageInserts.length, 1);
     assert.strictEqual(dbMock.state.reminderInserts.length, 0);
+    assert.strictEqual(dbMock.state.transactionCalls, 1);
     assert.strictEqual(io.emits.length, 1);
     assert.ok(dbMock.state.messageInserts[0][2].startsWith('📚 *Resumen de tu clase de hoy*'));
 }
@@ -308,8 +337,76 @@ async function testManualFlowAddsSecondMessageAndPreservesTranscriptId() {
     assert.strictEqual(dbMock.state.messageInserts.length, 2);
     assert.strictEqual(dbMock.state.reminderInserts.length, 1);
     assert.strictEqual(dbMock.state.reminderInserts[0][3], 77);
+    assert.strictEqual(dbMock.state.transactionCalls, 1);
     assert.ok(dbMock.state.messageInserts[1][2].includes('/student-portal?homeworkReminder=500'));
     assert.strictEqual(io.emits.length, 2);
+}
+
+async function testManualFlowNormalizesStudentUserIdToStudentRecordId() {
+    const dbMock = createMockDb({
+        query(sql, params, state) {
+            if (sql.includes("SELECT id FROM users WHERE id = $1 AND role = 'student'")) return { rows: [{ id: 55 }] };
+            if (sql.includes("SELECT id FROM students WHERE user_id = $1 AND academy_id = $2 AND assigned_teacher_id = $3")) {
+                return { rows: [{ id: 12 }] };
+            }
+            if (sql.includes('SELECT r.id FROM rooms r')) return { rows: [{ id: 91 }] };
+            if (sql.includes('INSERT INTO messages')) {
+                state.messageInserts.push(params);
+                return { rows: [], rowCount: 1 };
+            }
+            if (sql.includes('INSERT INTO homework_reminders')) {
+                state.reminderInserts.push(params);
+                return { rows: [{ id: 501 }], lastID: 501 };
+            }
+            if (sql.includes('SELECT name FROM users WHERE id = $1')) return { rows: [{ name: 'Profesora Ada' }] };
+            throw new Error(`Unexpected SQL in user-id test: ${sql}`);
+        }
+    });
+    const homeworkService = loadHomeworkReminderService(dbMock);
+    const io = createIoMock();
+    const routerHarness = createRouterHarness();
+
+    purgeModules([ROUTES_PATH]);
+    const makeRouter = loadWithMocks(ROUTES_PATH, {
+        express: routerHarness.express,
+        '../db': dbMock,
+        '../services/gmail': () => () => ({ checkAndProcessTranscripts: async () => 0 }),
+        '../services/homework-reminders': homeworkService,
+        '../middleware/auth': { authenticateJWT: createNoopMiddleware() },
+        '../middleware/roles': {
+            requireAdmin: createNoopMiddleware(),
+            requireTeacherOrAdmin: createNoopMiddleware()
+        },
+        '../notifications': { createNotification() {} },
+        '../utils/multer': { pdfUpload: { single: () => createNoopMiddleware() } },
+        '../services/groq': {},
+        '../services/calendar': { makeOAuth2Client() { return {}; } },
+        googleapis: { google: {} }
+    });
+
+    makeRouter(io);
+    const handler = routerHarness.routes.post.get('/api/transcripts/send-to-chat');
+    const req = {
+        user: { id: 7, academy_id: 3, role: 'teacher' },
+        body: {
+            student_id: 55,
+            summary: {
+                transcript_id: 88,
+                resumen: 'Resumen',
+                deberes: ['ejercicio 1'],
+                conceptos_clave: ['Matrices'],
+                pistas_profesor: ['Repasa'],
+                mensaje_motivador: 'Bien'
+            }
+        }
+    };
+    const res = createRes();
+
+    await handler(req, res, err => { throw err; });
+
+    assert.strictEqual(res.statusCode, 200);
+    assert.strictEqual(dbMock.state.reminderInserts.length, 1);
+    assert.strictEqual(dbMock.state.reminderInserts[0][1], 12);
 }
 
 function testHistoryShapingPreservesTranscriptLinkage() {
@@ -445,26 +542,200 @@ async function testGmailFlowAddsSecondMessageWhenHomeworkExists() {
     assert.strictEqual(dbMock.state.reminderInserts.length, 1);
     assert.strictEqual(dbMock.state.reminderInserts[0][3], 700);
     assert.strictEqual(dbMock.state.messageInserts.length, 2);
+    assert.strictEqual(dbMock.state.transactionCalls, 1);
     assert.ok(dbMock.state.messageInserts[1][3].includes('/student-portal?homeworkReminder=900'));
     assert.strictEqual(io.emits.length, 2);
 }
 
+async function testManualFlowRollsBackOnReminderCtaFailure() {
+    const dbMock = createMockDb({
+        query(sql, params, state) {
+            if (sql.includes("SELECT id FROM users WHERE id = $1 AND role = 'student'")) return { rows: [] };
+            if (sql.includes('SELECT id, user_id FROM students WHERE id = $1')) return { rows: [{ id: 12, user_id: 55 }] };
+            if (sql.includes("SELECT id FROM students WHERE user_id = $1 AND academy_id = $2 AND assigned_teacher_id = $3")) return { rows: [{ id: 12 }] };
+            if (sql.includes('SELECT r.id FROM rooms r')) return { rows: [{ id: 91 }] };
+            if (sql.includes('INSERT INTO messages')) {
+                state.messageInserts.push(params);
+                if (state.messageInserts.length === 2) throw new Error('CTA insert failed');
+                return { rows: [], rowCount: 1 };
+            }
+            if (sql.includes('INSERT INTO homework_reminders')) {
+                state.reminderInserts.push(params);
+                return { rows: [{ id: 500 }], lastID: 500 };
+            }
+            throw new Error(`Unexpected SQL in rollback test: ${sql}`);
+        }
+    });
+    const homeworkService = loadHomeworkReminderService(dbMock);
+    const io = createIoMock();
+    const routerHarness = createRouterHarness();
+
+    purgeModules([ROUTES_PATH]);
+    const makeRouter = loadWithMocks(ROUTES_PATH, {
+        express: routerHarness.express,
+        '../db': dbMock,
+        '../services/gmail': () => () => ({ checkAndProcessTranscripts: async () => 0 }),
+        '../services/homework-reminders': homeworkService,
+        '../middleware/auth': { authenticateJWT: createNoopMiddleware() },
+        '../middleware/roles': {
+            requireAdmin: createNoopMiddleware(),
+            requireTeacherOrAdmin: createNoopMiddleware()
+        },
+        '../notifications': { createNotification() {} },
+        '../utils/multer': { pdfUpload: { single: () => createNoopMiddleware() } },
+        '../services/groq': {},
+        '../services/calendar': { makeOAuth2Client() { return {}; } },
+        googleapis: { google: {} }
+    });
+
+    makeRouter(io);
+    const handler = routerHarness.routes.post.get('/api/transcripts/send-to-chat');
+    const req = {
+        user: { id: 7, academy_id: 3, role: 'teacher' },
+        body: {
+            student_id: 12,
+            summary: {
+                transcript_id: 99,
+                resumen: 'Resumen',
+                deberes: ['ejercicio'],
+                conceptos_clave: ['Tema'],
+                pistas_profesor: ['Pista'],
+                mensaje_motivador: 'Bien'
+            }
+        }
+    };
+    const res = createRes();
+
+    await handler(req, res, err => err);
+
+    assert.notStrictEqual(res.statusCode, 200);
+    assert.strictEqual(dbMock.state.messageInserts.length, 0);
+    assert.strictEqual(dbMock.state.reminderInserts.length, 0);
+    assert.strictEqual(io.emits.length, 0);
+}
+
+async function testGmailFlowRollsBackOnReminderCtaFailure() {
+    const dbMock = createMockDb({
+        query(sql, params, state) {
+            if (sql.includes('SELECT id FROM transcripts WHERE gmail_msg_id = $1')) return { rows: [] };
+            if (sql.includes('SELECT s.id, s.name, s.user_id FROM students s WHERE s.academy_id = $1 AND s.assigned_teacher_id = $2')) {
+                return { rows: [{ id: 12, name: 'Ana', user_id: 55 }] };
+            }
+            if (sql.includes('SELECT r.id FROM rooms r')) return { rows: [{ id: 91 }] };
+            if (sql.includes('INSERT INTO messages')) {
+                state.messageInserts.push(params);
+                if (state.messageInserts.length === 2) throw new Error('CTA insert failed');
+                return { rows: [], rowCount: 1 };
+            }
+            if (sql.includes('INSERT INTO transcripts')) {
+                state.transcriptInserts.push(params);
+                return { rows: [{ id: 700 }], lastID: 700 };
+            }
+            if (sql.includes('INSERT INTO homework_reminders')) {
+                state.reminderInserts.push(params);
+                return { rows: [{ id: 900 }], lastID: 900 };
+            }
+            if (sql.includes('UPDATE users SET gmail_last_check')) {
+                state.updates.push({ sql, params });
+                return { rows: [], rowCount: 1 };
+            }
+            throw new Error(`Unexpected SQL in gmail rollback test: ${sql}`);
+        }
+    });
+    const homeworkService = loadHomeworkReminderService(dbMock);
+    const io = createIoMock();
+    const oauthClient = { setCredentials() {}, on() {} };
+    const gmailApi = {
+        users: {
+            messages: {
+                async list() {
+                    return { data: { messages: [{ id: 'msg-1' }] } };
+                },
+                async get() {
+                    return {
+                        data: {
+                            internalDate: String(new Date('2026-06-25T10:00:00Z').getTime()),
+                            payload: { mimeType: 'text/plain', body: { data: Buffer.from('A'.repeat(150)).toString('base64') } }
+                        }
+                    };
+                },
+                async modify() {
+                    return { data: {} };
+                }
+            }
+        }
+    };
+    const groqMock = {
+        chat: {
+            completions: {
+                async create() {
+                    return {
+                        choices: [{
+                            message: { content: JSON.stringify({ student_name: 'Ana', resumen: 'Resumen', deberes: ['ejercicio'], conceptos_clave: ['Tema'], pistas_profesor: ['Pista'], mensaje_motivador: 'Bien' }) }
+                        }]
+                    };
+                }
+            }
+        }
+    };
+
+    purgeModules([GMAIL_PATH]);
+    const makeGmailService = loadWithMocks(GMAIL_PATH, {
+        '../db': dbMock,
+        './groq': groqMock,
+        './homework-reminders': homeworkService,
+        '../notifications': { createNotification() {} },
+        './calendar': { makeOAuth2Client() { return oauthClient; } },
+        googleapis: { google: { gmail() { return gmailApi; } } }
+    });
+
+    const gmailService = makeGmailService(io);
+    const processed = await gmailService.checkAndProcessTranscripts({
+        id: 7,
+        name: 'Profesora Ada',
+        role: 'teacher',
+        academy_id: 3,
+        gmail_access_token: 'token',
+        gmail_refresh_token: 'refresh',
+        gmail_token_expiry: Date.now(),
+        gmail_last_check: null,
+        transcript_email: null
+    });
+
+    assert.strictEqual(processed, 0);
+    assert.strictEqual(dbMock.state.messageInserts.length, 0);
+    assert.strictEqual(dbMock.state.transcriptInserts.length, 0);
+    assert.strictEqual(dbMock.state.reminderInserts.length, 0);
+    assert.strictEqual(io.emits.length, 0);
+}
+
 async function run() {
     const originalLog = console.log;
+    const originalError = console.error;
     console.log = (...args) => {
         const message = args.join(' ');
         if (QUIET_LOG_PREFIXES.some(prefix => message.startsWith(prefix))) return;
         originalLog(...args);
+    };
+    console.error = (...args) => {
+        const message = args.join(' ');
+        if (args.length === 1 && args[0] instanceof Error && args[0].message === 'CTA insert failed') return;
+        if (QUIET_ERROR_PREFIXES.some(prefix => message.startsWith(prefix))) return;
+        originalError(...args);
     };
 
     try {
         await testServiceHelpers();
         await testManualFlowSkipsSecondMessageWithoutCleanHomework();
         await testManualFlowAddsSecondMessageAndPreservesTranscriptId();
+        await testManualFlowNormalizesStudentUserIdToStudentRecordId();
         testHistoryShapingPreservesTranscriptLinkage();
         await testGmailFlowAddsSecondMessageWhenHomeworkExists();
+        await testManualFlowRollsBackOnReminderCtaFailure();
+        await testGmailFlowRollsBackOnReminderCtaFailure();
     } finally {
         console.log = originalLog;
+        console.error = originalError;
     }
 }
 

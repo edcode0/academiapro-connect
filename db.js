@@ -7,6 +7,146 @@ let pool;
 let sqliteDb;
 const isPostgres = !!process.env.DATABASE_URL;
 
+function convertSqliteQuery(text, params = []) {
+  const usedIndices = [];
+  const sql = text.replace(/\$(\d+)/g, (match, idx) => {
+    usedIndices.push(parseInt(idx, 10) - 1);
+    return '?';
+  });
+  const args = usedIndices.map(i => params[i]);
+  return { sql, args };
+}
+
+function attachLastId(res) {
+  if (res && !Object.prototype.hasOwnProperty.call(res, 'lastID')) {
+    res.lastID = res.rows && res.rows[0] ? res.rows[0].id : null;
+  }
+  return res;
+}
+
+function createPostgresRunner(client) {
+  return {
+    query(text, params = [], callback) {
+      if (typeof params === 'function') {
+        callback = params;
+        params = [];
+      }
+      if (callback) {
+        client.query(text, params, (err, res) => callback(err, attachLastId(res)));
+        return;
+      }
+      return client.query(text, params).then(attachLastId);
+    },
+    all(text, params = [], callback) {
+      if (typeof params === 'function') {
+        callback = params;
+        params = [];
+      }
+      if (callback) {
+        client.query(text, params, (err, res) => callback(err, res ? res.rows : []));
+        return;
+      }
+      return client.query(text, params).then(res => res.rows);
+    },
+    get(text, params = [], callback) {
+      if (typeof params === 'function') {
+        callback = params;
+        params = [];
+      }
+      if (callback) {
+        client.query(text, params, (err, res) => callback(err, res && res.rows ? res.rows[0] : null));
+        return;
+      }
+      return client.query(text, params).then(res => res.rows[0]);
+    },
+    run(text, params = [], callback) {
+      if (typeof params === 'function') {
+        callback = params;
+        params = [];
+      }
+      if (callback) {
+        client.query(text, params, callback);
+        return;
+      }
+      return client.query(text, params);
+    }
+  };
+}
+
+function createSqliteRunner(connection) {
+  return {
+    query(text, params = [], callback) {
+      if (typeof params === 'function') {
+        callback = params;
+        params = [];
+      }
+
+      return new Promise((resolve, reject) => {
+        try {
+          const isSelect = text.trim().toUpperCase().startsWith('SELECT') ||
+            text.trim().toUpperCase().startsWith('WITH');
+          const { sql, args } = convertSqliteQuery(text, params);
+          if (isSelect) {
+            connection.all(sql, args, (err, rows) => {
+              const result = { rows: rows || [], rowCount: rows ? rows.length : 0 };
+              if (callback) callback(err, result);
+              if (err) reject(err); else resolve(result);
+            });
+          } else {
+            connection.run(sql, args, function (err) {
+              const result = { rows: [], rowCount: this.changes, lastID: this.lastID, insertId: this.lastID };
+              if (callback) callback(err, result);
+              if (err) reject(err); else resolve(result);
+            });
+          }
+        } catch (syncErr) {
+          if (callback) callback(syncErr);
+          reject(syncErr);
+        }
+      });
+    },
+    all(text, params = [], callback) {
+      if (typeof params === 'function') {
+        callback = params;
+        params = [];
+      }
+      const { sql, args } = convertSqliteQuery(text, params);
+      if (callback) return connection.all(sql, args, callback);
+      return new Promise((resolve, reject) => {
+        connection.all(sql, args, (err, rows) => err ? reject(err) : resolve(rows || []));
+      });
+    },
+    get(text, params = [], callback) {
+      if (typeof params === 'function') {
+        callback = params;
+        params = [];
+      }
+      const { sql, args } = convertSqliteQuery(text, params);
+      if (callback) return connection.get(sql, args, callback);
+      return new Promise((resolve, reject) => {
+        connection.get(sql, args, (err, row) => err ? reject(err) : resolve(row));
+      });
+    },
+    run(text, params = [], callback) {
+      if (typeof params === 'function') {
+        callback = params;
+        params = [];
+      }
+      const { sql, args } = convertSqliteQuery(text, params);
+      if (callback) {
+        return connection.run(sql, args, function (err) {
+          callback.call(this, err);
+        });
+      }
+      return new Promise((resolve, reject) => {
+        connection.run(sql, args, function (err) {
+          if (err) reject(err); else resolve(this);
+        });
+      });
+    }
+  };
+}
+
 if (isPostgres) {
   console.log('Using PostgreSQL (Railway)');
   pool = new Pool({
@@ -33,60 +173,11 @@ const db = {
       }
 
       if (isPostgres) {
-        // PostgreSQL native query
-        if (callback) {
-          pool.query(text, params, (err, res) => {
-            if (res) {
-              res.lastID = res.rows && res.rows[0] ? res.rows[0].id : null;
-            }
-            callback(err, res);
-          });
-        } else {
-          return pool.query(text, params).then(res => {
-            if (res.rows && res.rows[0]) res.lastID = res.rows[0].id;
-            return res;
-          }).catch(err => {
-            console.error('DB query error:', err.message);
-            throw err;
-          });
-        }
+        const runner = createPostgresRunner(pool);
+        return runner.query(text, params, callback);
       } else {
-        // SQLite wrapper — convert PostgreSQL $N placeholders to ? and expand params
-        const convertQuery = (text, params) => {
-          // Replace $1, $2, ... with ? and build a positional params array
-          const usedIndices = [];
-          const convertedText = text.replace(/\$(\d+)/g, (match, idx) => {
-            usedIndices.push(parseInt(idx, 10) - 1); // 0-based index
-            return '?';
-          });
-          const convertedParams = usedIndices.map(i => params[i]);
-          return { sql: convertedText, args: convertedParams };
-        };
-
-        return new Promise((resolve, reject) => {
-          try {
-            const isSelect = text.trim().toUpperCase().startsWith('SELECT') ||
-              text.trim().toUpperCase().startsWith('WITH');
-            const { sql, args } = convertQuery(text, params);
-            if (isSelect) {
-              sqliteDb.all(sql, args, (err, rows) => {
-                const result = { rows: rows || [], rowCount: rows ? rows.length : 0 };
-                if (callback) callback(err, result);
-                if (err) reject(err); else resolve(result);
-              });
-            } else {
-              sqliteDb.run(sql, args, function (err) {
-                const result = { rows: [], rowCount: this.changes, lastID: this.lastID, insertId: this.lastID };
-                if (callback) callback(err, result);
-                if (err) reject(err); else resolve(result);
-              });
-            }
-          } catch (syncErr) {
-            console.error('DB sync error:', syncErr.message);
-            if (callback) callback(syncErr);
-            reject(syncErr);
-          }
-        });
+        const runner = createSqliteRunner(sqliteDb);
+        return runner.query(text, params, callback);
       }
     } catch (outerErr) {
       console.error('DB OUTER ERROR:', outerErr.message);
@@ -101,27 +192,11 @@ const db = {
         params = [];
       }
       if (isPostgres) {
-        if (callback) {
-          pool.query(text, params, (err, res) => callback(err, res ? res.rows : []));
-        } else {
-          return pool.query(text, params).then(res => res.rows).catch(err => {
-            console.error('DB query error:', err.message);
-            throw err;
-          });
-        }
+        const runner = createPostgresRunner(pool);
+        return runner.all(text, params, callback);
       } else {
-        const usedIndices = [];
-        const sql = text.replace(/\$(\d+)/g, (m, i) => { usedIndices.push(parseInt(i, 10) - 1); return '?'; });
-        const args = usedIndices.map(i => params[i]);
-        if (callback) {
-          sqliteDb.all(sql, args, callback);
-        } else {
-          return new Promise((resolve, reject) => {
-            sqliteDb.all(sql, args, (err, rows) => {
-              if (err) reject(err); else resolve(rows || []);
-            });
-          });
-        }
+        const runner = createSqliteRunner(sqliteDb);
+        return runner.all(text, params, callback);
       }
     } catch (err) {
       console.error('DB OUTER ERROR:', err.message);
@@ -136,27 +211,11 @@ const db = {
         params = [];
       }
       if (isPostgres) {
-        if (callback) {
-          pool.query(text, params, (err, res) => callback(err, res && res.rows ? res.rows[0] : null));
-        } else {
-          return pool.query(text, params).then(res => res.rows[0]).catch(err => {
-            console.error('DB query error:', err.message);
-            throw err;
-          });
-        }
+        const runner = createPostgresRunner(pool);
+        return runner.get(text, params, callback);
       } else {
-        const usedIndices = [];
-        const sql = text.replace(/\$(\d+)/g, (m, i) => { usedIndices.push(parseInt(i, 10) - 1); return '?'; });
-        const args = usedIndices.map(i => params[i]);
-        if (callback) {
-          sqliteDb.get(sql, args, callback);
-        } else {
-          return new Promise((resolve, reject) => {
-            sqliteDb.get(sql, args, (err, row) => {
-              if (err) reject(err); else resolve(row);
-            });
-          });
-        }
+        const runner = createSqliteRunner(sqliteDb);
+        return runner.get(text, params, callback);
       }
     } catch (err) {
       console.error('DB OUTER ERROR:', err.message);
@@ -171,34 +230,52 @@ const db = {
         params = [];
       }
       if (isPostgres) {
-        if (callback) {
-          pool.query(text, params, callback);
-        } else {
-          return pool.query(text, params).catch(err => {
-            console.error('DB query error:', err.message);
-            throw err;
-          });
-        }
+        const runner = createPostgresRunner(pool);
+        return runner.run(text, params, callback);
       } else {
-        const usedIndices = [];
-        const sql = text.replace(/\$(\d+)/g, (m, i) => { usedIndices.push(parseInt(i, 10) - 1); return '?'; });
-        const args = usedIndices.map(i => params[i]);
-        if (callback) {
-          sqliteDb.run(sql, args, function (err) {
-            if (callback) callback.call(this, err);
-          });
-        } else {
-          return new Promise((resolve, reject) => {
-            sqliteDb.run(sql, args, function (err) {
-              if (err) reject(err); else resolve(this);
-            });
-          });
-        }
+        const runner = createSqliteRunner(sqliteDb);
+        return runner.run(text, params, callback);
       }
     } catch (err) {
       console.error('DB OUTER ERROR:', err.message);
       if (callback) callback(err);
       else return Promise.reject(err);
+    }
+  },
+  withTransaction: async (work) => {
+    if (isPostgres) {
+      const client = await pool.connect();
+      const tx = createPostgresRunner(client);
+      try {
+        await client.query('BEGIN');
+        const result = await work(tx);
+        await client.query('COMMIT');
+        return result;
+      } catch (err) {
+        try {
+          await client.query('ROLLBACK');
+        } catch (rollbackErr) {
+          console.error('DB rollback error:', rollbackErr.message);
+        }
+        throw err;
+      } finally {
+        client.release();
+      }
+    }
+
+    const tx = createSqliteRunner(sqliteDb);
+    try {
+      await tx.run('BEGIN');
+      const result = await work(tx);
+      await tx.run('COMMIT');
+      return result;
+    } catch (err) {
+      try {
+        await tx.run('ROLLBACK');
+      } catch (rollbackErr) {
+        console.error('DB rollback error:', rollbackErr.message);
+      }
+      throw err;
     }
   }
 };

@@ -217,21 +217,6 @@ module.exports = function makeGmailService(io) {
                 );
                 let roomId = (roomResult.rows || [])[0]?.id;
 
-                if (!roomId) {
-                    const newRoom = await db.query(
-                        isPostgres
-                            ? `INSERT INTO rooms (academy_id, type, name, created_at) VALUES ($1, 'direct', $2, NOW()) RETURNING id`
-                            : `INSERT INTO rooms (academy_id, type, name, created_at) VALUES ($1, 'direct', $2, datetime('now'))`,
-                        [teacher.academy_id, `${teacher.name} - ${student.name}`]
-                    );
-                    roomId = newRoom.rows[0].id;
-                    const memberSql = isPostgres
-                        ? 'INSERT INTO room_members (room_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING'
-                        : 'INSERT OR IGNORE INTO room_members (room_id, user_id) VALUES ($1, $2)';
-                    await db.query(memberSql, [roomId, teacher.id]);
-                    await db.query(memberSql, [roomId, studentUserId]);
-                }
-
                 // Build and save chat message
                 const d = analysisData;
                 const chatMessage =
@@ -242,41 +227,61 @@ module.exports = function makeGmailService(io) {
                     `💪 ${d.mensaje_motivador || d.teacher_notes || ''}` +
                     (recordingLink ? `\n\n🎥 *Grabación de la clase:*\n${recordingLink}` : '');
 
-                await db.query(
-                    isPostgres
-                        ? `INSERT INTO messages (room_id, sender_id, academy_id, content, created_at) VALUES ($1, $2, $3, $4, NOW())`
-                        : `INSERT INTO messages (room_id, sender_id, academy_id, content, created_at) VALUES ($1, $2, $3, $4, datetime('now'))`,
-                    [roomId, teacher.id, teacher.academy_id, chatMessage]
-                );
+                const transactionResult = await db.withTransaction(async tx => {
+                    if (!roomId) {
+                        const newRoom = await tx.query(
+                            isPostgres
+                                ? `INSERT INTO rooms (academy_id, type, name, created_at) VALUES ($1, 'direct', $2, NOW()) RETURNING id`
+                                : `INSERT INTO rooms (academy_id, type, name, created_at) VALUES ($1, 'direct', $2, datetime('now'))`,
+                            [teacher.academy_id, `${teacher.name} - ${student.name}`]
+                        );
+                        roomId = newRoom.rows[0].id;
+                        const memberSql = isPostgres
+                            ? 'INSERT INTO room_members (room_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING'
+                            : 'INSERT OR IGNORE INTO room_members (room_id, user_id) VALUES ($1, $2)';
+                        await tx.query(memberSql, [roomId, teacher.id]);
+                        await tx.query(memberSql, [roomId, studentUserId]);
+                    }
 
-                // Save transcript record (with gmail_msg_id for deduplication)
-                const transcriptInsert = await db.query(
-                    isPostgres
-                        ? 'INSERT INTO transcripts (academy_id, teacher_id, student_id, raw_text, processed_json, gmail_msg_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id'
-                        : 'INSERT INTO transcripts (academy_id, teacher_id, student_id, raw_text, processed_json, gmail_msg_id) VALUES ($1, $2, $3, $4, $5, $6)',
-                    [teacher.academy_id, teacher.id, student.id, body.substring(0, 5000), JSON.stringify(analysisData), msg.id]
-                );
-                const transcriptId = transcriptInsert.rows?.[0]?.id || transcriptInsert.lastID || transcriptInsert.insertId || null;
-                console.log('[Gmail] Transcript saved for student:', student.name);
-
-                const reminder = await createHomeworkReminderFromTranscript({
-                    academyId: teacher.academy_id,
-                    teacherId: teacher.id,
-                    studentId: student.id,
-                    transcriptId,
-                    processed: analysisData
-                });
-
-                let promptHtml = null;
-                if (reminder) {
-                    promptHtml = buildHomeworkReminderPrompt(reminder.id, reminder.homeworkList);
-                    await db.query(
+                    await tx.query(
                         isPostgres
                             ? `INSERT INTO messages (room_id, sender_id, academy_id, content, created_at) VALUES ($1, $2, $3, $4, NOW())`
                             : `INSERT INTO messages (room_id, sender_id, academy_id, content, created_at) VALUES ($1, $2, $3, $4, datetime('now'))`,
-                        [roomId, teacher.id, teacher.academy_id, promptHtml]
+                        [roomId, teacher.id, teacher.academy_id, chatMessage]
                     );
-                }
+
+                    const transcriptInsert = await tx.query(
+                        isPostgres
+                            ? 'INSERT INTO transcripts (academy_id, teacher_id, student_id, raw_text, processed_json, gmail_msg_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id'
+                            : 'INSERT INTO transcripts (academy_id, teacher_id, student_id, raw_text, processed_json, gmail_msg_id) VALUES ($1, $2, $3, $4, $5, $6)',
+                        [teacher.academy_id, teacher.id, student.id, body.substring(0, 5000), JSON.stringify(analysisData), msg.id]
+                    );
+                    const transcriptId = transcriptInsert.rows?.[0]?.id || transcriptInsert.lastID || transcriptInsert.insertId || null;
+
+                    const reminder = await createHomeworkReminderFromTranscript({
+                        academyId: teacher.academy_id,
+                        teacherId: teacher.id,
+                        studentId: student.id,
+                        transcriptId,
+                        processed: analysisData,
+                        dbRunner: tx
+                    });
+
+                    let promptHtml = null;
+                    if (reminder) {
+                        promptHtml = buildHomeworkReminderPrompt(reminder.id, reminder.homeworkList);
+                        await tx.query(
+                            isPostgres
+                                ? `INSERT INTO messages (room_id, sender_id, academy_id, content, created_at) VALUES ($1, $2, $3, $4, NOW())`
+                                : `INSERT INTO messages (room_id, sender_id, academy_id, content, created_at) VALUES ($1, $2, $3, $4, datetime('now'))`,
+                            [roomId, teacher.id, teacher.academy_id, promptHtml]
+                        );
+                    }
+
+                    return { transcriptId, promptHtml };
+                });
+                const { transcriptId, promptHtml } = transactionResult;
+                console.log('[Gmail] Transcript saved for student:', student.name);
 
                 // Notify student
                 if (student.user_id) {

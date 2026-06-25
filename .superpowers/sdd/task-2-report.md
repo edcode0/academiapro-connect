@@ -183,3 +183,69 @@ homework-reminders tests passed
 - The primary transcript message remains unchanged in both manual and Gmail flows; only the second CTA reminder message is additive.
 - The history resend UI now keeps working even if an older `processed_json` row cannot be parsed.
 - The focused test file now exercises task-critical flow behavior with mocked `db` and `io`, not just pure helper functions.
+
+---
+
+## Re-review fix pass
+
+### What I fixed
+
+- Added `db.withTransaction(async tx => { ... })` in `db.js` using `pool.connect()` for PostgreSQL so `BEGIN/COMMIT/ROLLBACK` stay on the same connection. SQLite uses the existing single connection safely through the same helper.
+- Updated `services/homework-reminders.js` so reminder creation can run against either the global db object or a transaction runner via `dbRunner`.
+- Fixed manual transcript send in `routes/transcripts.js` so reminders always store the canonical `students.id`, even when the request payload supplies a student user id.
+- Wrapped the related manual transcript writes in a transaction so the primary message, reminder record, and CTA message are atomic.
+- Wrapped the related Gmail transcript writes in a transaction so the primary message, transcript row, reminder row, and CTA message are atomic.
+
+### Re-review TDD evidence
+
+1. RED:
+   - Command: `node tests/homework-reminders.js`
+   - Result: FAIL
+   - Output:
+
+```text
+AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+0 !== 1
+
+    at testManualFlowSkipsSecondMessageWithoutCleanHomework
+```
+
+2. GREEN:
+   - Command: `node tests/homework-reminders.js`
+   - Result: PASS
+   - Output:
+
+```text
+homework-reminders tests passed
+```
+
+3. Syntax verification:
+   - Command: `node --check db.js`
+   - Result: PASS
+   - Command: `node --check services/homework-reminders.js`
+   - Result: PASS
+   - Command: `node --check routes/transcripts.js`
+   - Result: PASS
+   - Command: `node --check services/gmail.js`
+   - Result: PASS
+
+### Files updated in re-review fix pass
+
+- `db.js`
+- `services/homework-reminders.js`
+- `routes/transcripts.js`
+- `services/gmail.js`
+- `tests/homework-reminders.js`
+
+### Re-review test coverage added
+
+- Manual flow stores reminders against canonical `students.id` when the request shape uses a student user id.
+- Manual flow uses the transaction path and rolls back cleanly when the CTA write fails after the primary message.
+- Gmail flow uses the transaction path and rolls back cleanly when the CTA write fails after transcript/reminder creation.
+
+### Re-review self-review findings
+
+- The primary transcript messages remain unchanged in both manual and Gmail flows.
+- Reminder creation now shares the transaction runner instead of bypassing it through the global db object.
+- The focused mocked tests now cover both normalization and no-partial-write behavior at the feature boundary.
