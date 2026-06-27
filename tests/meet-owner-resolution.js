@@ -84,6 +84,39 @@ function loadMeetRoute({ queryImpl, createCalendarEventImpl }) {
     return routerHarness.routes.post.get('/api/calendar/meet');
 }
 
+async function testAdminUsesSlotTeacherCalendarFirst() {
+    const createdWith = [];
+    const handler = loadMeetRoute({
+        async queryImpl(sql) {
+            if (sql.includes('FROM available_slots a')) {
+                return { rows: [{ teacher_id: 77, student_name: 'Marta' }] };
+            }
+            if (sql.includes('SELECT * FROM users WHERE id = $1')) {
+                return { rows: [{ id: 77, calendar_access_token: 'teacher-token', calendar_refresh_token: 'refresh' }] };
+            }
+            if (sql.includes('UPDATE available_slots SET google_event_id = $1, meet_link = $2')) {
+                return { rows: [], rowCount: 1 };
+            }
+            throw new Error(`Unexpected SQL: ${sql}`);
+        },
+        async createCalendarEventImpl(teacher, slot) {
+            createdWith.push({ teacherId: teacher.id, studentName: slot.student_name });
+            return { google_event_id: 'evt-slot', meet_link: 'https://meet.google.com/slot-owner-link' };
+        }
+    });
+
+    const req = {
+        user: { id: 9001, role: 'admin', academy_id: 7 },
+        body: { slot_id: 31, date: '2026-07-01', start_time: '17:00', end_time: '18:00' }
+    };
+    const res = createRes();
+    await handler(req, res, () => {});
+
+    assert.strictEqual(res.statusCode, 200);
+    assert.strictEqual(createdWith[0].teacherId, 77);
+    assert.strictEqual(createdWith[0].studentName, 'Marta');
+}
+
 async function testAdminUsesAssignedTeacherCalendar() {
     const createdWith = [];
     const handler = loadMeetRoute({
@@ -192,6 +225,7 @@ async function testResolvedTeacherWithoutCalendarGets400() {
 }
 
 async function run() {
+    await testAdminUsesSlotTeacherCalendarFirst();
     await testAdminUsesAssignedTeacherCalendar();
     await testTeacherFallsBackToRequesterWhenNoClassTeacherExists();
     await testAdminWithoutResolvableTeacherGets400();

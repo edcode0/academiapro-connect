@@ -3,7 +3,6 @@
 const express  = require('express');
 const router   = express.Router();
 const bcrypt   = require('bcryptjs');
-const jwt      = require('jsonwebtoken');
 const passport = require('passport');
 const crypto   = require('crypto');
 const db       = require('../db');
@@ -14,8 +13,6 @@ const {
 } = require('../middleware/auth');
 const { requireTeacherOrAdmin } = require('../middleware/roles');
 const { sendWelcomeEmail, sendJoinWelcomeEmail } = require('../services/email');
-
-const JWT_SECRET = process.env.JWT_SECRET;
 
 const { generateCode, generateUserCode } = require('../utils/codes');
 const rateLimit = require('express-rate-limit');
