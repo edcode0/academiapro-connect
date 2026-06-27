@@ -7,12 +7,15 @@ const jwt      = require('jsonwebtoken');
 const passport = require('passport');
 const crypto   = require('crypto');
 const db       = require('../db');
-const { authenticateJWT } = require('../middleware/auth');
+const {
+    authenticateJWT,
+    buildAuthCookieOptions,
+    signAuthToken
+} = require('../middleware/auth');
 const { requireTeacherOrAdmin } = require('../middleware/roles');
 const { sendWelcomeEmail, sendJoinWelcomeEmail } = require('../services/email');
 
 const JWT_SECRET = process.env.JWT_SECRET;
-const COOKIE_OPTS = { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', maxAge: 7 * 24 * 60 * 60 * 1000 };
 
 const { generateCode, generateUserCode } = require('../utils/codes');
 const rateLimit = require('express-rate-limit');
@@ -177,12 +180,15 @@ router.post('/auth/login', async (req, res, next) => {
         }
 
         // Generate token
-        const token = jwt.sign(
-            { id: user.id, email: user.email, role: user.role, academy_id: user.academy_id, name: user.name, user_code: user.user_code },
-            JWT_SECRET,
-            { expiresIn: '7d' }
-        );
-        res.cookie('token', token, COOKIE_OPTS);
+        const token = signAuthToken({
+            id: user.id,
+            email: user.email,
+            role: user.role,
+            academy_id: user.academy_id,
+            name: user.name,
+            user_code: user.user_code
+        });
+        res.cookie('token', token, buildAuthCookieOptions());
 
         console.log('Login successful: id=%d role=%s', user.id, user.role);
         res.json({
@@ -263,11 +269,12 @@ router.post('/api/auth/join', async (req, res, next) => {
         );
         const user = newUserResult.rows?.[0] || newUserResult[0];
 
-        const token = jwt.sign(
-            { id: user.id, email: user.email, role: user.role, academy_id: user.academy_id },
-            JWT_SECRET,
-            { expiresIn: '7d' }
-        );
+        const token = signAuthToken({
+            id: user.id,
+            email: user.email,
+            role: user.role,
+            academy_id: user.academy_id
+        });
 
         console.log('User joined: id=%d role=%s academy=%d', user.id, user.role, academy.id);
 
@@ -288,7 +295,7 @@ router.post('/api/auth/join', async (req, res, next) => {
         // Send welcome email (non-blocking)
         sendJoinWelcomeEmail(user, academy.name, role);
 
-        res.cookie('token', token, COOKIE_OPTS);
+        res.cookie('token', token, buildAuthCookieOptions());
         res.json({
             user: { id: user.id, name: user.name, email: user.email, role: user.role }
         });
@@ -322,11 +329,15 @@ router.get('/auth/google/callback', passport.authenticate('google', { failureRed
             if (!existingUser.google_id) {
                 await db.query('UPDATE users SET google_id = $1 WHERE id = $2', [profile.id, existingUser.id]);
             }
-            const token = jwt.sign(
-                { id: existingUser.id, email: existingUser.email, role: existingUser.role, academy_id: existingUser.academy_id, name: existingUser.name, user_code: existingUser.user_code },
-                JWT_SECRET, { expiresIn: '7d' }
-            );
-            res.cookie('token', token, COOKIE_OPTS);
+            const token = signAuthToken({
+                id: existingUser.id,
+                email: existingUser.email,
+                role: existingUser.role,
+                academy_id: existingUser.academy_id,
+                name: existingUser.name,
+                user_code: existingUser.user_code
+            });
+            res.cookie('token', token, buildAuthCookieOptions());
             console.log('Google Auth existing user: id=%d role=%s', existingUser.id, existingUser.role);
             return res.redirect('/auth-success');
         }
@@ -381,11 +392,15 @@ router.get('/auth/google/callback', passport.authenticate('google', { failureRed
         const newUserRes = await db.query('SELECT id, name, email, role, academy_id, user_code FROM users WHERE id = $1', [userId]);
         const newUser = newUserRes.rows?.[0];
 
-        const token = jwt.sign(
-            { id: newUser.id, email: newUser.email, role: newUser.role, academy_id: newUser.academy_id, name: newUser.name, user_code: newUser.user_code },
-            JWT_SECRET, { expiresIn: '7d' }
-        );
-        res.cookie('token', token, COOKIE_OPTS);
+        const token = signAuthToken({
+            id: newUser.id,
+            email: newUser.email,
+            role: newUser.role,
+            academy_id: newUser.academy_id,
+            name: newUser.name,
+            user_code: newUser.user_code
+        });
+        res.cookie('token', token, buildAuthCookieOptions());
         console.log('Google Auth new user: id=%d role=%s', newUser.id, newUser.role);
         return res.redirect('/auth-success');
 
