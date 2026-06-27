@@ -11,6 +11,50 @@ const { requireStudent, requireTeacherOrAdmin } = require('../middleware/roles')
 
 const isPostgres = db.isPostgres;
 
+async function resolveMeetTeacherContext({ req, studentId, sessionId, slotId }) {
+    if (slotId) {
+        const slotRes = await db.query(
+            `SELECT a.teacher_id, COALESCE(s.name, 'Alumno') AS student_name
+             FROM available_slots a
+             LEFT JOIN students s ON s.id = a.student_id
+             WHERE a.id = $1 AND a.academy_id = $2`,
+            [slotId, req.user.academy_id]
+        );
+        const slot = slotRes.rows[0];
+        if (slot?.teacher_id) return { teacher: slot, studentName: slot.student_name || 'Alumno' };
+    }
+
+    if (sessionId) {
+        const sessionRes = await db.query(
+            `SELECT COALESCE(a.teacher_id, st.assigned_teacher_id) AS teacher_id, st.name AS student_name
+             FROM sessions s
+             JOIN students st ON st.id = s.student_id
+             LEFT JOIN available_slots a ON a.id = s.slot_id
+             WHERE s.id = $1 AND st.academy_id = $2`,
+            [sessionId, req.user.academy_id]
+        );
+        const session = sessionRes.rows[0];
+        if (session?.teacher_id) return { teacher: session, studentName: session.student_name || 'Alumno' };
+    }
+
+    if (studentId) {
+        const studentRes = await db.query(
+            `SELECT assigned_teacher_id AS teacher_id, name AS student_name
+             FROM students
+             WHERE id = $1 AND academy_id = $2`,
+            [studentId, req.user.academy_id]
+        );
+        const student = studentRes.rows[0];
+        if (student?.teacher_id) return { teacher: student, studentName: student.student_name || 'Alumno' };
+    }
+
+    if (req.user.role === 'teacher') {
+        return { teacher: { teacher_id: req.user.id }, studentName: 'Alumno' };
+    }
+
+    return { teacher: null, studentName: 'Alumno' };
+}
+
 // GET available slots depending on role
 router.get('/api/calendar/slots', authenticateJWT, (req, res, next) => {
     let sql = `
@@ -98,16 +142,21 @@ router.post('/api/calendar/meet', authenticateJWT, requireTeacherOrAdmin, async 
             return res.status(400).json({ error: 'Se requieren fecha, hora inicio y hora fin' });
         }
 
-        const teacherRes = await db.query('SELECT * FROM users WHERE id = $1', [req.user.id]);
-        const teacher = teacherRes.rows[0];
-        if (!teacher?.calendar_access_token) {
-            return res.status(400).json({ error: 'Google Calendar no conectado. Ve a Configuración > Integraciones para conectarlo.' });
+        const resolved = await resolveMeetTeacherContext({
+            req,
+            studentId: student_id,
+            sessionId: session_id,
+            slotId: slot_id
+        });
+
+        if (!resolved.teacher?.teacher_id) {
+            return res.status(400).json({ error: 'No se puede crear el Meet todavía: asigna un profesor a esta clase primero.' });
         }
 
-        let studentName = 'Alumno';
-        if (student_id) {
-            const sr = await db.query('SELECT name FROM students WHERE id = $1 AND academy_id = $2', [student_id, req.user.academy_id]);
-            if (sr.rows[0]) studentName = sr.rows[0].name;
+        const teacherRes = await db.query('SELECT * FROM users WHERE id = $1', [resolved.teacher.teacher_id]);
+        const teacher = teacherRes.rows[0];
+        if (!teacher?.calendar_access_token) {
+            return res.status(400).json({ error: 'El profesor asignado no tiene Google Calendar conectado.' });
         }
 
         const startDatetime = `${date}T${start_time}:00`;
@@ -116,7 +165,7 @@ router.post('/api/calendar/meet', authenticateJWT, requireTeacherOrAdmin, async 
         const calResult = await createCalendarEvent(teacher, {
             start_datetime: startDatetime,
             end_datetime:   endDatetime,
-            student_name:   studentName
+            student_name:   resolved.studentName || 'Alumno'
         });
 
         if (!calResult?.meet_link) {
