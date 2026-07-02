@@ -302,7 +302,7 @@ router.post('/api/calendar/slots/:id/book', authenticateJWT, requireStudent, asy
             const slot = slotRes.rows[0];
             const dt = slot.start_datetime.split('T')[0];
             await db.query(
-                'INSERT INTO sessions (student_id, date, duration_minutes, homework_done, slot_id) VALUES ($1, $2, 60, false, $3)',
+                "INSERT INTO sessions (student_id, date, duration_minutes, homework_done, slot_id, session_type) VALUES ($1, $2, 60, false, $3, 'individual')",
                 [studentId, dt, req.params.id]
             );
 

@@ -276,7 +276,7 @@ router.get('/api/student/portal-data', authenticateJWT, async (req, res, next) =
             student,
             sessions, exams, payments, links,
             averageScore: exams.length ? Math.round(exams.reduce((s, e) => s + (e.score || 0), 0) / exams.length * 10) / 10 : 0,
-            pendingPayments: payments.filter(p => p.status === 'pending').reduce((s, p) => s + (p.amount || 0), 0),
+            pendingPayments: payments.filter(p => p.status === 'pendiente').reduce((s, p) => s + (p.amount || 0), 0),
             homeworkRate: sessions.length ? Math.round(sessions.filter(s => s.homework_done).length / sessions.length * 100) : 0
         });
     } catch (err) {

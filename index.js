@@ -24,9 +24,9 @@ process.on('uncaughtException', (err) => {
 });
 
 process.on('unhandledRejection', (reason, promise) => {
+    // Log + report but do NOT exit: a single stray rejection shouldn't take the whole server down.
     console.error('UNHANDLED REJECTION:', reason);
     Sentry.captureException(reason instanceof Error ? reason : new Error(String(reason)));
-    process.exit(1);
 });
 
 const express = require('express');
@@ -61,6 +61,10 @@ const cookie = require('cookie');
 const http = require('http');
 const { Server } = require("socket.io");
 
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(',')
+    : ['http://localhost:3000'];
+
 const app = express();
 app.get('/health', async (req, res) => {
     try {
@@ -73,7 +77,7 @@ app.get('/health', async (req, res) => {
 
 const server = http.createServer(app);
 const io = new Server(server, {
-    cors: { origin: '*', methods: ['GET', 'POST'] },
+    cors: { origin: allowedOrigins, methods: ['GET', 'POST'], credentials: true },
     maxHttpBufferSize: 1e7 // 10MB
 });
 const { createNotification, setIo: setNotifIo } = require('./notifications');
@@ -127,9 +131,6 @@ if (process.env.NODE_ENV === 'production') {
     app.set('trust proxy', 1);
 }
 
-const allowedOrigins = process.env.ALLOWED_ORIGINS
-    ? process.env.ALLOWED_ORIGINS.split(',')
-    : ['http://localhost:3000'];
 app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use(helmet({
   contentSecurityPolicy: {

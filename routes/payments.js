@@ -18,7 +18,7 @@ router.post('/api/payments', authenticateJWT, requireTeacherOrAdmin, async (req,
         const result = await db.query(
             `INSERT INTO payments (student_id, amount, due_date, status, paid_date)
              VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-            [student_id, amount, due_date, status || 'pending', paid_date || null]
+            [student_id, amount, due_date, status || 'pendiente', paid_date || null]
         );
         res.json(result.rows[0]);
     } catch (err) {
