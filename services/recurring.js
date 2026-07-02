@@ -71,11 +71,7 @@ async function generateRecurringSlots(rule, weeksAhead = 8) {
         if (existing.rows?.length) continue;
 
         // Insert slot
-        const insertSql = isPostgres
-            ? 'INSERT INTO available_slots (teacher_id, academy_id, start_datetime, end_datetime, is_booked, student_id, recurrence_rule_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id'
-            : 'INSERT INTO available_slots (teacher_id, academy_id, start_datetime, end_datetime, is_booked, student_id, recurrence_rule_id) VALUES ($1, $2, $3, $4, $5, $6, $7)';
-        const slotRes = await db.query(insertSql, [teacher_id, academy_id, startDatetime, endDatetime, true, student_id, ruleId]);
-        const slotId = isPostgres ? slotRes.rows[0].id : slotRes.lastID;
+        const slotId = await db.insertReturning('INSERT INTO available_slots (teacher_id, academy_id, start_datetime, end_datetime, is_booked, student_id, recurrence_rule_id) VALUES ($1, $2, $3, $4, $5, $6, $7)', [teacher_id, academy_id, startDatetime, endDatetime, true, student_id, ruleId]);
 
         // Create session row
         const dateStr = startDatetime.slice(0, 10);

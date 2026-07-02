@@ -100,11 +100,7 @@ router.post('/api/calendar/slots', authenticateJWT, requireTeacherOrAdmin, async
     try {
         const { start_datetime, end_datetime, student_id, notes, meet_link: providedMeetLink } = req.body;
         const isBooked = !!student_id;
-        const insertSql = isPostgres
-            ? 'INSERT INTO available_slots (teacher_id, academy_id, start_datetime, end_datetime, is_booked, student_id, notes) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id'
-            : 'INSERT INTO available_slots (teacher_id, academy_id, start_datetime, end_datetime, is_booked, student_id, notes) VALUES ($1, $2, $3, $4, $5, $6, $7)';
-        const result = await db.query(insertSql, [req.user.id, req.user.academy_id, start_datetime, end_datetime, isBooked, student_id || null, notes || null]);
-        const slotId = isPostgres ? result.rows[0].id : result.lastID;
+        const slotId = await db.insertReturning('INSERT INTO available_slots (teacher_id, academy_id, start_datetime, end_datetime, is_booked, student_id, notes) VALUES ($1, $2, $3, $4, $5, $6, $7)', [req.user.id, req.user.academy_id, start_datetime, end_datetime, isBooked, student_id || null, notes || null]);
 
         if (providedMeetLink) {
             // Meet link was already created on-demand — just save it
@@ -449,11 +445,7 @@ router.post('/api/calendar/recurring', authenticateJWT, requireTeacherOrAdmin, a
 
         const dow = parseInt(day_of_week, 10);
         const dur = parseInt(duration_minutes, 10) || 60;
-        const insertSql = isPostgres
-            ? 'INSERT INTO recurring_sessions (academy_id, teacher_id, student_id, day_of_week, start_time, duration_minutes) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id'
-            : 'INSERT INTO recurring_sessions (academy_id, teacher_id, student_id, day_of_week, start_time, duration_minutes) VALUES ($1,$2,$3,$4,$5,$6)';
-        const r = await db.query(insertSql, [req.user.academy_id, req.user.id, student_id, dow, start_time, dur]);
-        const ruleId = isPostgres ? r.rows[0].id : r.lastID;
+        const ruleId = await db.insertReturning('INSERT INTO recurring_sessions (academy_id, teacher_id, student_id, day_of_week, start_time, duration_minutes) VALUES ($1,$2,$3,$4,$5,$6)', [req.user.academy_id, req.user.id, student_id, dow, start_time, dur]);
 
         const rule = { id: ruleId, academy_id: req.user.academy_id, teacher_id: req.user.id, student_id, day_of_week: dow, start_time, duration_minutes: dur };
         await generateRecurringSlots(rule, 8);

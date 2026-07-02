@@ -164,6 +164,14 @@ if (isPostgres) {
 }
 
 const db = {
+  // Run an INSERT and return the new row id on both engines.
+  // Pass the INSERT without a RETURNING clause; it's appended for Postgres only.
+  // SQLite exposes lastID natively; the pg runner mirrors rows[0].id onto lastID.
+  insertReturning: async (text, params = []) => {
+    const sql = isPostgres ? `${text} RETURNING id` : text;
+    const res = await db.query(sql, params);
+    return res.rows?.[0]?.id ?? res.lastID ?? null;
+  },
   // Universal query method
   query: (text, params = [], callback) => {
     try {

@@ -32,7 +32,7 @@ Verif: boot OK. Sin migración destructiva (tolera datos existentes).
 Verif: EXPLAIN usa índices; dashboards devuelven mismos datos.
 
 ## FASE 5 — Arquitectura / mantenibilidad  [1-2 commits]
-- [ ] **A1** Helper `db.insertReturning(table, cols, vals)` que abstrae `isPostgres ? RETURNING : lastID`. Migrar los ~40 sitios con el patrón. (Mayor limpiador de ruido.)
+- [x] **A1** ✅ Helper `db.insertReturning(text, params)` en db.js. Migrados 15 sitios: auth(8), calendar(2), ai(1), transcripts(1), recurring(1), rooms(2). Dejados: inserts en `withTransaction`/`dbRunner`/`RETURNING *`. Verif: register real + login 200 en SQLite.
 - [ ] **A2** Unificar `authenticateJWT`: borrar copia inline `index.js:219`, usar la de `middleware/auth.js` en todo (páginas incluidas).
 - [ ] **A3** Extraer `resolveStudentUserId()` del triple-fallback de transcripts send-to-chat.
 Verif: smoke completo tras cada migración; sin cambio de comportamiento.
