@@ -27,4 +27,4 @@ Debes configurar las siguientes variables en la sección **Settings -> Variables
 ## 4. Notas Técnicas
 *   La aplicación sigue funcionando con **SQLite localmente** si no se define `DATABASE_URL` en el archivo `.env`.
 *   Se han unificado todas las consultas para ser compatibles con ambos motores (placeholders `$1, $2`, etc.).
-*   Los archivos subidos (chat y reportes) se guardan localmente en `public/uploads`. Para producción real a gran escala, se recomienda migrar a un almacenamiento en la nube (ej: AWS S3), pero para uso inicial en Railway con volúmenes bajos funcionará.
+*   Los archivos subidos (chat y reportes) se guardan en `public/uploads`, que en Railway está montado sobre un **volumen persistente** (`web-volume`, mount path `/app/public/uploads`) — sobreviven a los deploys. Para escala mayor podría migrarse a object storage (S3/bucket), pero el volumen cubre el uso actual.

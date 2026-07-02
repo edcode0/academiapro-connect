@@ -40,9 +40,12 @@ Verif: smoke completo tras cada migración; sin cambio de comportamiento.
 ## FASE 6 — Frontend  🟡 F1/F2 COMPLETO, F3/F4/F5 PENDIENTE
 - [x] **F1** `design-system.css` borrado (0 páginas lo cargaban).
 - [x] **F2** `sidebar.js` = fuente única del sidebar. 21 páginas (index + 20) usan `<div id="sidebar-mount" data-role>` + script. Nav por rol (admin/teacher/student), activo por pathname, ids preservados. student_profile.html unificado (tenía nav admin stale). ai_tutor/chat/transcripts intactos (sidebar propio). Verif: screenshots Playwright de los 3 roles = idénticos. Deploy `1819894`.
-- [ ] **F3** CSS del sidebar a UN bloque en `shared-dashboard.css` + borrar reglas `aside`/`.nav-*` inline de las 21 páginas. RIESGO MEDIO: el CSS inline puede diverger por página → screenshot-verificar. (F2 ya resuelve editar markup/nav en 1 sitio; F3 permite editar CSS en 1 sitio.)
-- [ ] **F4** Decidir UN sistema CSS: glassmorphism XOR shared. Eliminar solapes `aside`/`body`/`.card`. (Decisión estética del usuario.)
-- [ ] **F5** XSS: auditar `innerHTML` con datos de usuario (nombres, mensajes, notas) → escapar. Reusar `escapeHtml`. (Seguridad, scope propio.)
+- [x] **F3** ✅ CSS del sidebar consolidado en shared-dashboard.css (movido `.user-info`/`.user-info strong`; strip de reglas inline duplicadas en 21 páginas, -1026 líneas). Verif: screenshots Playwright 3 roles = idénticos (diffs 27-119 bytes). Deploy `ef537cd`.
+- [ ] **F4** PENDIENTE — decisión estética del usuario: glassmorphism XOR shared. Cambia el aspecto de la app. NO hacer sin su elección.
+- [x] **F5** ✅ XSS: `escapeHtml` global en global.js + ~53 sinks escapados (chat content/sender/filename/room, nombres en tablas/dropdowns/perfiles, subject/notes/topic). textContent intactos. Verif Playwright: alumno con nombre `<img onerror>` ya NO ejecuta (antes sí). Deploy `510b529`.
+
+## VOLUMEN RAILWAY ✅ COMPLETO 2026-07-02
+- [x] `web-volume` (5GB) montado en `/app/public/uploads` del servicio web. Confirmado por SSH: dispositivo montado + escribible. Adjuntos chat + PDFs informes ya persisten entre deploys. README actualizado.
 
 ## FASE 7 — Producto / features  [PENDIENTE — checkpoint con usuario]
 - [ ] **PR1** `payments/auto-generate` → correr en cron mensual (`cron.js` ya tiene `isFirstOfMonth`). Cambia comportamiento de producto → confirmar.
