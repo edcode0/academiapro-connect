@@ -78,7 +78,6 @@ const io = new Server(server, {
 });
 const { createNotification, setIo: setNotifIo } = require('./notifications');
 const { dispatchDueHomeworkReminders } = require('./services/homework-reminders');
-const { checkStudentRisk } = require('./services/risk');
 const initChatSocket = require('./sockets/chat');
 const calendarRouter        = require('./routes/calendar');
 const studentsRouter        = require('./routes/students');
@@ -154,9 +153,10 @@ const registerLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 10, standardH
 const aiLimiter = rateLimit({ windowMs: 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false });
 const globalLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 500, standardHeaders: true, legacyHeaders: false });
 app.use('/api/', globalLimiter);
-app.use('/api/login', loginLimiter);
-app.use('/api/register', registerLimiter);
-app.use('/api/join', registerLimiter);
+// Brute-force limiters must match the REAL endpoint paths (auth routes live at /auth/*, not /api/*)
+app.use('/auth/login', loginLimiter);
+app.use('/auth/register', registerLimiter);
+app.use('/api/auth/join', registerLimiter);
 app.use('/api/ai-tutor', aiLimiter);
 
 app.use(bodyParser.json());
@@ -402,54 +402,10 @@ app.get('/uploads/:folder/:filename', (req, res, next) => {
 
 
 
-// Generic CRUD fallback — academy-scoped and column-whitelisted to prevent cross-tenant tampering and SQL injection
-const CRUD_ALLOWED_COLUMNS = {
-    students: new Set(['name', 'course', 'subject', 'status', 'join_date', 'parent_email', 'parent_phone', 'assigned_teacher_id', 'monthly_fee', 'payment_day', 'payment_method', 'payment_notes', 'payment_start_date']),
-    sessions: new Set(['date', 'duration_minutes', 'homework_done', 'teacher_notes', 'slot_id', 'meet_link']),
-    exams:    new Set(['date', 'subject', 'score', 'notes']),
-    payments: new Set(['amount', 'due_date', 'paid_date', 'status'])
-};
-
-['students', 'sessions', 'exams', 'payments'].forEach(tableName => {
-    app.put(`/api/${tableName}/:id`, authenticateJWT, (req, res, next) => {
-        const allowed = CRUD_ALLOWED_COLUMNS[tableName];
-        const allKeys = Object.keys(req.body);
-        const badKeys = allKeys.filter(k => !allowed.has(k));
-        if (badKeys.length) return res.status(400).json({ error: `Invalid fields: ${badKeys.join(', ')}` });
-        const keys = allKeys.filter(k => allowed.has(k));
-        if (!keys.length) return res.status(400).json({ error: 'No valid fields to update' });
-
-        const setClause = keys.map((key, i) => `${key} = $${i + 1}`).join(', ');
-        const idParam = keys.length + 1;
-        const academyParam = keys.length + 2;
-        const academyFilter = tableName === 'students'
-            ? `AND academy_id = $${academyParam}`
-            : `AND student_id IN (SELECT id FROM students WHERE academy_id = $${academyParam})`;
-        const values = [...keys.map(k => req.body[k]), req.params.id, req.user.academy_id];
-
-        db.query(`UPDATE ${tableName} SET ${setClause} WHERE id = $${idParam} ${academyFilter}`, values, (err, result) => {
-            if (err) return next(err);
-            if (result.rowCount === 0) return res.status(404).json({ error: 'Record not found or access denied' });
-            if (tableName === 'sessions' || tableName === 'exams') {
-                db.query(`SELECT student_id FROM ${tableName} WHERE id = $1`, [req.params.id], (err, resId) => {
-                    const row = resId?.rows[0];
-                    if (row) checkStudentRisk(row.student_id);
-                });
-            }
-            res.json({ updated: result.rowCount });
-        });
-    });
-    app.delete(`/api/${tableName}/:id`, authenticateJWT, (req, res, next) => {
-        const academyFilter = tableName === 'students'
-            ? `AND academy_id = $2`
-            : `AND student_id IN (SELECT id FROM students WHERE academy_id = $2)`;
-        db.query(`DELETE FROM ${tableName} WHERE id = $1 ${academyFilter}`, [req.params.id, req.user.academy_id], (err, result) => {
-            if (err) return next(err);
-            if (result.rowCount === 0) return res.status(404).json({ error: 'Record not found or access denied' });
-            res.json({ deleted: result.rowCount });
-        });
-    });
-});
+// NOTE: generic PUT/DELETE /api/{students,sessions,exams,payments}/:id removed.
+// PUT + sessions/exams/payments DELETE were shadowed (dead) by their routers;
+// DELETE /api/students/:id was the only live one and had no role check — a student
+// could delete peers. Admin delete goes through /api/admin/students/:id (requireAdmin).
 
 
 

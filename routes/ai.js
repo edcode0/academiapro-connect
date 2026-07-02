@@ -251,9 +251,12 @@ router.get('/api/ai/conversations/:id/messages', authenticateJWT, async (req, re
 });
 
 // Save message to conversation
-router.post('/api/ai/conversations/:id/messages', authenticateJWT, (req, res, next) => {
+router.post('/api/ai/conversations/:id/messages', authenticateJWT, async (req, res, next) => {
     const { role, content } = req.body;
     const conversationId = req.params.id;
+
+    const owner = await db.query('SELECT id FROM ai_conversations WHERE id = $1 AND user_id = $2', [conversationId, req.user.id]);
+    if (!owner.rows.length) return res.status(403).json({ error: 'Acceso denegado' });
 
     db.query('INSERT INTO ai_messages (conversation_id, role, content) VALUES ($1, $2, $3)', [conversationId, role, content], (err) => {
         if (err) return next(err);

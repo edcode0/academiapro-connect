@@ -93,29 +93,8 @@ module.exports = function makeChatRouter(io) {
         res.redirect('/api/chat/rooms');
     });
 
-    router.post('/api/chat/messages', authenticateJWT, async (req, res, next) => {
-        try {
-            const { roomId, content } = req.body;
-            if (!roomId || !content) {
-                return res.status(400).json({ error: 'roomId and content required' });
-            }
-            const result = await db.query(
-                'INSERT INTO messages (room_id, sender_id, academy_id, content, created_at) VALUES ($1, $2, $3, $4, NOW()) RETURNING *',
-                [roomId, req.user.id, req.user.academy_id, content]
-            );
-            const message = result.rows[0];
-            if (io) {
-                io.to(`academy_${req.user.academy_id}`).emit('new_message', {
-                    ...message,
-                    sender_name: req.user.name,
-                    sender_role: req.user.role
-                });
-            }
-            res.json(message);
-        } catch (err) {
-            next(err);
-        }
-    });
+    // Removed legacy POST /api/chat/messages: no membership check (could post to any room)
+    // and unused by the frontend, which sends via socket or /api/chat/rooms/:roomId/messages.
 
     router.post('/api/chat/rooms/:roomId/messages', authenticateJWT, async (req, res, next) => {
         try {

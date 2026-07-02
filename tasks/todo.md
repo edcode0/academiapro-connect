@@ -1,136 +1,66 @@
-# tasks/todo.md - Estado actual (verificado 2026-06-09)
+# PLAN DE ARREGLO INTEGRAL — auditoría 2026-07-02 (main @ d2a38d0)
+
+Modo: ponytail (mínimo que funciona) + caveman. Cada fase = 1 commit deployable.
+Orden por riesgo: seguridad → datos → rendimiento → arquitectura → frontend → features → higiene.
+Regla: verificar cada fase (smoke tests + curl/Playwright) antes de commit. No avanzar si algo rompe.
 
 ---
 
-## SPRINT 2026-06-25 — Recordatorios de deberes desde transcripciones ✅ COMPLETO
+## FASE 1 — Seguridad crítica (P0)  ✅ COMPLETO 2026-07-02 (rama fix/audit-phase1-security)
+- [x] **S1** `DELETE /api/students/:id` genérico sin rol → borrado (bloque CRUD genérico entero, era dead-code + vuln). Admin usa `/api/admin/students/:id`. Verif: DELETE genérico → 404.
+- [x] **S2** Rate limiters → movidos a `/auth/login`, `/auth/register`, `/api/auth/join`. Verif: 22× login = 20×401 luego 429.
+- [x] **S3** `POST /api/chat/messages` sin check pertenencia → borrado (legacy, 0 usos en front; front usa socket + `/rooms/:roomId/messages`).
+- [x] **S4** `POST /api/ai/conversations/:id/messages` → añadido guard ownership `user_id`.
+- [x] **S5** `GET /api/simulator/results/:id` → student exige `s.user_id = req.user.id`.
+Verif OK: syntax + boot local + curl S1/S2/S4.
 
-| Feature | Estado | Notas |
-|---------|--------|-------|
-| F4 - Recordatorios de deberes V1 | ✅ Completo | Tabla `homework_reminders`, scheduling alumno, notificación interna, bandeja profesor |
-| F5 - Push móvil accionable V2 | 📌 Backlog | Notificación push real con acciones `No tengo deberes`, `No los he hecho`, `Ya los he hecho` |
+## FASE 2 — Seguridad media/baja (P1)  [1 commit]
+- [ ] **S6** Socket.io `cors origin:'*'` (index.js:76) → usar `allowedOrigins`.
+- [ ] **S7** `unhandledRejection` → `process.exit(1)` (index.js:26) → log + Sentry sin matar proceso.
+- [ ] **S8** Logout server-side: token cookie 15d sin revocación. Mínimo: `/auth/logout` ya limpia cookie; documentar. Revocación real = YAGNI salvo requisito legal — decidir.
+Verif: server arranca, socket conecta desde dominio propio, rejection no tumba.
 
----
+## FASE 3 — Consistencia de datos  [1 commit]
+- [ ] **D1** Estados de pago mezclados EN/ES (`pending`/`pendiente`, `paid`/`pagado`) → normalizar a UN set. Migración backfill en `db.js` + arreglar POST default y filtros de `payments-data`.
+- [ ] **D2** `session_type` NULL vs 'individual' → default `'individual'` + backfill. Quitar `OR session_type IS NULL` repetido.
+Verif: recaudación de `payments-data` cuadra; teacher-payments da mismas horas.
 
-## SPRINT 2026-06-09 — 3 Features ✅ COMPLETO
+## FASE 4 — Rendimiento  [1 commit]
+- [ ] **P1** Índices: confirmar/crear en `db.js` initDb para `academy_id`, `student_id`, `assigned_teacher_id`, `room_id`, `user_id`, `messages.room_id`, `available_slots.start_datetime`.
+- [ ] **P2** N+1: `teacher/dashboard-stats` y `student-detail` → colapsar queries anidadas con `Promise.all`.
+- [ ] **P3** `payments-data`/`exams-data`: agregados en JS OK por ahora (ponytail: dejar salvo academia con >1000 filas). Marcar con comentario, no tocar.
+Verif: EXPLAIN usa índices; dashboards devuelven mismos datos.
 
-| Feature | Estado | Archivos |
-|---------|--------|---------|
-| F1 - Enlaces por alumno | ✅ | db.js, routes/students.js, student_profile.html, teacher_student_profile.html, student_portal.html |
-| F2 - Enlace grabación en transcripción | ✅ | services/gmail.js |
-| F3 - Sesiones recurrentes semanales | ✅ | db.js, services/recurring.js, routes/calendar.js, cron.js, teacher_calendar.html |
+## FASE 5 — Arquitectura / mantenibilidad  [1-2 commits]
+- [ ] **A1** Helper `db.insertReturning(table, cols, vals)` que abstrae `isPostgres ? RETURNING : lastID`. Migrar los ~40 sitios con el patrón. (Mayor limpiador de ruido.)
+- [ ] **A2** Unificar `authenticateJWT`: borrar copia inline `index.js:219`, usar la de `middleware/auth.js` en todo (páginas incluidas).
+- [ ] **A3** Extraer `resolveStudentUserId()` del triple-fallback de transcripts send-to-chat.
+Verif: smoke completo tras cada migración; sin cambio de comportamiento.
 
-**F1 — Links:** Tabla `student_links`. CRUD `/api/students/:id/links`. Tab "🔗 Enlaces" en perfil admin + teacher. Solo lectura en portal alumno. Validación URL http/https, escape XSS.
+## FASE 6 — Frontend (el gordo)  [varios commits, validar por página]
+- [ ] **F1** `design-system.css` muerto (0 páginas lo cargan) → borrar.
+- [ ] **F2** Sidebar a fuente única: `sidebar.js` inyecta `<aside>` en `<div id="sidebar-mount">`, marca activo por `location.pathname`. Borrar las 24 copias de markup.
+- [ ] **F3** CSS del sidebar a UN bloque en `shared-dashboard.css`. Borrar reglas `aside`/`.nav-*` inline de las 24 páginas.
+- [ ] **F4** Decidir UN sistema CSS: glassmorphism XOR shared. Eliminar solapes `aside`/`body`/`.card`.
+- [ ] **F5** XSS: auditar `innerHTML` con datos de usuario (nombres, mensajes, notas) → escapar. Reusar `escapeHtml` existente.
+Verif: Playwright (`webapp-testing`) en index.html piloto ANTES de propagar. Sidebar cambia en 1 sitio → todas.
+Estrategia: F2/F3 a index.html primero, validar diseño con usuario, LUEGO propagar a las 23.
 
-**F2 — Grabación:** `extractRecordingLink()` en gmail.js extrae URL de Drive de HTML del email antes de limpiarlo. Concatena `🎥 Grabación de la clase:` al final del mensaje. Fallback silencioso si no hay URL.
+## FASE 7 — Producto / features  [1 commit]
+- [ ] **PR1** `payments/auto-generate` → correr en cron mensual (`cron.js` ya tiene `isFirstOfMonth`).
+- [ ] **PR2** Job diario recalcula riesgo por inactividad. Extiende `checkStudentRisk`.
+- [ ] **PR3** `email.js` fallback BASE_URL hardcodea dominio Railway viejo → usar `academiapro.academy`.
+Verif: cron dispara sin duplicar pagos; alumno inactivo pasa a at_risk.
 
-**F3 — Recurrencia:** Tabla `recurring_sessions` (regla). `services/recurring.js` (helper idempotente). `/api/calendar/recurring` POST/GET/DELETE. Cron diario mantiene horizonte rodante 8 semanas. Checkbox "🔁 Repetir" en modal de calendario. Meet nuevo por sesión (si OAuth conectado).
-
----
-
----
-
-## SPRINT 2026-03-25 - 4 Features ✅ COMPLETO
-
-| Feature | Estado |
-|---------|--------|
-| SA1 - Group Sessions | ✅ |
-| SA2 - Group Hourly Rate per Teacher | ✅ |
-| SA3 - Fixed Academy Codes | ✅ |
-| SA4 - Help Assistant Floating Button | ✅ |
-
----
-
-## FRONTEND IMPROVEMENTS - Estado real (2026-04-23)
-
-| # | Mejora | Estado |
-|---|--------|--------|
-| #1 | Mobile hamburger menu | ✅ - `hamburger-btn` + `toggleMobileNav` en 24 paginas |
-| #3 | Replace `alert()` with toasts | ✅ - `showToast` en `global.js`, 0 `alert()` en HTML |
-| #4 | Shared CSS deduplication | ✅ - `public/shared-dashboard.css` existe y esta enlazado |
-| #5 | Empty states for tables | ✅ - ya implementado en `index.html` y `teacher_dashboard.html` |
-| #6 | Password show/hide toggle | ✅ - `togglePwd()` en `login.html` y `join.html` |
-| #7 | Sidebar user avatar | ✅ - CSS anadido a `shared-dashboard.css`; JS ya estaba en `global.js` |
-| #8 | Student grade progress bar | ✅ - ya implementado en `student_portal.html` |
-| #9 | Landing pricing + footer | ⚠️ - pricing ✅, footer existe pero es de 2 columnas (no 3) |
-| #10 | Keyboard focus rings | ✅ - `:focus-visible` anadido a `shared-dashboard.css` |
-
-### Pendiente opcional: #9 footer 3 columnas
+## FASE 8 — Higiene repo  [1 commit]
+- [ ] **H1** Borrar ~40 scripts sueltos raíz (`patch_*.js`, `fix_*.js`, `diag*.js`, `*_out.txt`) + `tasks/*.js`.
+- [ ] **H2** `console.log` debug en prod → quitar los ruidosos (login id/role, GROQ set, academy_id).
+- [ ] **H3** Runner de tests unificado: `tests/*.js` sueltos → un `npm test` que los corra.
+Verif: repo limpio; `npm run test:smoke` verde.
 
 ---
 
-## REFACTOR index.js ✅ COMPLETO (2026-04-22)
-
-- `index.js`: 473 lineas (de 4129 originales)
-- 13 routers extraidos + `sockets/chat.js` + `middleware/` + `services/` + `utils/`
-- Smoke tests: 56/64 pasan (8 fallan por Groq restringido en test env - es normal)
-
----
-
-## AUDITORIA DE SEGURIDAD ✅ COMPLETA (2026-04-23)
-
-| Nivel | Fixes | Commits |
-|-------|-------|---------|
-| P0 - Auth bypass & cross-tenant leaks | ✅ 8 fixes | `ba01e66` |
-| P1 - Data leaks & auth logic | ✅ 10 fixes | `0e06a4a` |
-| P2/P3 - Rate limits, file handling, API logic | ✅ 10 fixes | `67e5807` |
-
-Archivos modificados: `routes/auth.js`, `routes/exams.js`, `routes/sessions.js`, `routes/teachers.js`, `routes/students.js`, `routes/chat.js`, `routes/transcripts.js`, `routes/calendar.js`, `routes/reports.js`, `routes/ai.js`, `middleware/auth.js`, `middleware/roles.js`, `utils/multer.js`, `public/auth-success.html`, `public/join.html`, `public/login.html`
-
----
-
-## AUDITORIA CODEX 2026-04-24 - En progreso
-
-Plan 5 fases tras auditoria estatica de Codex. Todos los hallazgos verificados contra codigo real.
-
-| Fase | Scope | Estado |
-|------|-------|--------|
-| 1 - P0/P1 authz gaps | `sockets/chat.js` (room bypass), `routes/sessions.js` (DELETE teacher filter), `routes/calendar.js` (DELETE+PUT) | ✅ `711aa67` |
-| 2 - Config hardening | `SESSION_SECRET` fail-fast, cookie `httpOnly/secure/sameSite`, `trust proxy` | ✅ |
-| 3 - Schema bugs | `auth.js` (quitar `subscription_status`), `teachers.js` (mark-paid columnas), `chat.js` (ruta legacy `receiver_id`) | ✅ `69869eb` |
-| 4 - Error sanitization | Middleware central, migrar ~125 `err.message -> next(err)` | ✅ `0d0f2f2` |
-| 5 - Verificacion dirigida | Tests smoke para cada hallazgo + arreglar runner JWT->cookies | ✅ `5875e13` + `fb6b51c` |
-
-## TRANSCRIPCIONES ✅ COMMIT `2a92b0b` (2026-04-30)
-
-| Fix | Estado |
-|-----|--------|
-| Schema canónico único Gmail+manual | ✅ |
-| Student matching seguro (pending_match) | ✅ |
-| gmail_last_check por email (no por loop) | ✅ |
-| Parser email: text/html + text/plain | ✅ |
-| SQLite compat NOW() en gmail.js | ✅ |
-| await en insert historial manual | ✅ |
-| requireTeacherOrAdmin en rutas proceso | ✅ |
-| Rutas pending + assign | ✅ |
-| DB: pending_match col + UNIQUE INDEX gmail_msg_id | ✅ |
-| UI: bloque estado Gmail + sección pendientes | ✅ |
-
-**PENDIENTE (no se puede hacer desde código):**
-- Railway: verificar `BASE_URL=https://academiapro.academy` en variables de entorno
-- Google Cloud Console: verificar redirect URI `https://academiapro.academy/api/gmail/callback`
-- transcript_email: actualmente es config muerta (limpieza opcional)
-
----
-
-## DEUDA - Smoke tests ✅ RESUELTO (verificado 2026-05-02)
-
-`npm run test:smoke` → **62/62 passed**. El fix ya estaba aplicado en commits anteriores. Documentación estaba desactualizada.
-
----
-
-## FIXES SESIÓN 2026-05-02 ✅ COMPLETO
-
-| Fix | Commit | Descripción |
-|-----|--------|-------------|
-| Google OAuth `callbackURL` | `ed8fff5` | Hardcodeado a dominio Railway → cambiado a `BASE_URL`. Causa: `TokenError: Bad Request` en cada login con Google (Sentry JAVASCRIPT-NEXTJS-2) |
-| Gmail query sender | `3970702` | Query solo buscaba `meet-recordings-noreply@google.com`. Gemini AI Notes envía desde `gemini-notes@google.com` → transcripciones nunca encontradas |
-
-**Pendiente operacional (no es código):**
-- Teachers con `invalid_grant` (IDs 1 y 9): deben reconectar Gmail desde Ajustes. Posible causa: app en modo Testing en Google Cloud Console (tokens caducan a los 7 días).
-
----
-
-## BUG FIXES 2026-03-28 ✅ COMPLETO
-
-- BUG 1 - `db-group-students-container` ya usaba `'block'` (ya estaba corregido)
-- BUG 2 - `group_hourly_rate` y `saveTeacherRate()` ya implementados en `settings.html`
+## Notas de ejecución
+- Verificar env Railway antes de FASE 6/7: **volumen montado** para `public/uploads/` (informes+adjuntos se pierden en deploy si no). Si no → migrar a bucket. BLOQUEANTE para prod, no para el plan de código.
+- Deploy: `git push origin main` → Railway auto (~2 min). Sin staging → cada fase pasa smoke antes de push.
+- Tras cada fase: actualizar este todo.md + `lessons.md` si hubo sorpresa.
