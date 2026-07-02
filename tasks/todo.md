@@ -37,14 +37,12 @@ Verif: EXPLAIN usa índices; dashboards devuelven mismos datos.
 - [ ] **A3** Extraer `resolveStudentUserId()` del triple-fallback de transcripts send-to-chat.
 Verif: smoke completo tras cada migración; sin cambio de comportamiento.
 
-## FASE 6 — Frontend (el gordo)  [varios commits, validar por página]
-- [ ] **F1** `design-system.css` muerto (0 páginas lo cargan) → borrar.
-- [ ] **F2** Sidebar a fuente única: `sidebar.js` inyecta `<aside>` en `<div id="sidebar-mount">`, marca activo por `location.pathname`. Borrar las 24 copias de markup.
-- [ ] **F3** CSS del sidebar a UN bloque en `shared-dashboard.css`. Borrar reglas `aside`/`.nav-*` inline de las 24 páginas.
-- [ ] **F4** Decidir UN sistema CSS: glassmorphism XOR shared. Eliminar solapes `aside`/`body`/`.card`.
-- [ ] **F5** XSS: auditar `innerHTML` con datos de usuario (nombres, mensajes, notas) → escapar. Reusar `escapeHtml` existente.
-Verif: Playwright (`webapp-testing`) en index.html piloto ANTES de propagar. Sidebar cambia en 1 sitio → todas.
-Estrategia: F2/F3 a index.html primero, validar diseño con usuario, LUEGO propagar a las 23.
+## FASE 6 — Frontend  🟡 F1/F2 COMPLETO, F3/F4/F5 PENDIENTE
+- [x] **F1** `design-system.css` borrado (0 páginas lo cargaban).
+- [x] **F2** `sidebar.js` = fuente única del sidebar. 21 páginas (index + 20) usan `<div id="sidebar-mount" data-role>` + script. Nav por rol (admin/teacher/student), activo por pathname, ids preservados. student_profile.html unificado (tenía nav admin stale). ai_tutor/chat/transcripts intactos (sidebar propio). Verif: screenshots Playwright de los 3 roles = idénticos. Deploy `1819894`.
+- [ ] **F3** CSS del sidebar a UN bloque en `shared-dashboard.css` + borrar reglas `aside`/`.nav-*` inline de las 21 páginas. RIESGO MEDIO: el CSS inline puede diverger por página → screenshot-verificar. (F2 ya resuelve editar markup/nav en 1 sitio; F3 permite editar CSS en 1 sitio.)
+- [ ] **F4** Decidir UN sistema CSS: glassmorphism XOR shared. Eliminar solapes `aside`/`body`/`.card`. (Decisión estética del usuario.)
+- [ ] **F5** XSS: auditar `innerHTML` con datos de usuario (nombres, mensajes, notas) → escapar. Reusar `escapeHtml`. (Seguridad, scope propio.)
 
 ## FASE 7 — Producto / features  [PENDIENTE — checkpoint con usuario]
 - [ ] **PR1** `payments/auto-generate` → correr en cron mensual (`cron.js` ya tiene `isFirstOfMonth`). Cambia comportamiento de producto → confirmar.
