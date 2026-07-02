@@ -37,9 +37,6 @@ router.post('/api/ai-tutor/extract-pdf', authenticateJWT, async (req, res, next)
 
 router.post('/api/ai-tutor/chat', authenticateJWT, async (req, res, next) => {
     const { messages: rawMessages, conversationId: clientConversationId } = req.body;
-    console.log('[ai-tutor/chat] user:', req.user?.id, 'role:', req.user?.role, 'academy_id:', req.user?.academy_id);
-    console.log('[ai-tutor/chat] GROQ_API_KEY set:', !!process.env.GROQ_API_KEY);
-    console.log('[ai-tutor/chat] clientConversationId:', clientConversationId);
     let systemPrompt = "Eres un asistente educativo inteligente de AcademiaPro. Ayudas a estudiantes con cualquier materia y duda académica. Explicas conceptos de forma clara y adaptada al nivel del alumno. Eres paciente, motivador y pedagógico. Responde SIEMPRE en español.";
 
     try {
@@ -71,15 +68,12 @@ router.post('/api/ai-tutor/chat', authenticateJWT, async (req, res, next) => {
             [req.user.id, req.user.academy_id, userMessageStr.substring(0, 50)]
           );
           conversationId = newConv.rows[0].id;
-          console.log('[ai-tutor/chat] created new conversation:', conversationId);
         } else {
           // Update updated_at on existing conversation
           await db.query('UPDATE ai_conversations SET updated_at = NOW() WHERE id = $1', [conversationId]).catch(err => console.error('[AI Tutor] Conversation timestamp update failed:', err.message));
-          console.log('[ai-tutor/chat] using existing conversation:', conversationId);
         }
 
         // Save user message BEFORE calling AI
-        console.log('[ai-tutor/chat] saving user message to conversation', conversationId);
         await db.query(
           'INSERT INTO ai_messages (conversation_id, role, content, created_at) VALUES ($1, $2, $3, NOW())',
           [conversationId, 'user', userMessageStr]
@@ -112,7 +106,6 @@ router.post('/api/ai-tutor/chat', authenticateJWT, async (req, res, next) => {
           'INSERT INTO ai_messages (conversation_id, role, content, created_at) VALUES ($1, $2, $3, NOW())',
           [conversationId, 'assistant', aiResponse]
         );
-        console.log('[ai-tutor/chat] messages saved OK, conversation', conversationId);
 
         res.json({ response: aiResponse, conversationId });
     } catch (e) {

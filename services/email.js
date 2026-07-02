@@ -23,7 +23,7 @@ async function sendWelcomeEmail(user, academyName) {
             html: loadTemplate('welcome', {
                 USER_NAME:    user.name,
                 ACADEMY_NAME: academyName || 'AcademiaPro',
-                BASE_URL:     process.env.BASE_URL || 'https://web-production-d02f4.up.railway.app',
+                BASE_URL:     process.env.BASE_URL || 'https://academiapro.academy',
             }),
         });
         console.log('[Email] Welcome email sent to user id:', user.id);
@@ -37,7 +37,7 @@ async function sendJoinWelcomeEmail(user, academyName, role) {
         const resend        = new Resend(process.env.RESEND_API_KEY);
         const roleText      = role === 'teacher' ? 'profesor' : 'alumno';
         const dashboardPath = role === 'teacher' ? '/teacher' : '/student-portal';
-        const baseUrl       = process.env.BASE_URL || 'https://web-production-d02f4.up.railway.app';
+        const baseUrl       = process.env.BASE_URL || 'https://academiapro.academy';
         await resend.emails.send({
             from:    'AcademiaPro <no-reply@academiapro.academy>',
             to:      user.email,
