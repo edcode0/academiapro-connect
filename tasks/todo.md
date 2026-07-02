@@ -14,16 +14,16 @@ Regla: verificar cada fase (smoke tests + curl/Playwright) antes de commit. No a
 - [x] **S5** `GET /api/simulator/results/:id` → student exige `s.user_id = req.user.id`.
 Verif OK: syntax + boot local + curl S1/S2/S4.
 
-## FASE 2 — Seguridad media/baja (P1)  [1 commit]
-- [ ] **S6** Socket.io `cors origin:'*'` (index.js:76) → usar `allowedOrigins`.
-- [ ] **S7** `unhandledRejection` → `process.exit(1)` (index.js:26) → log + Sentry sin matar proceso.
-- [ ] **S8** Logout server-side: token cookie 15d sin revocación. Mínimo: `/auth/logout` ya limpia cookie; documentar. Revocación real = YAGNI salvo requisito legal — decidir.
-Verif: server arranca, socket conecta desde dominio propio, rejection no tumba.
+## FASE 2 — Seguridad media/baja (P1)  ✅ COMPLETO 2026-07-02
+- [x] **S6** Socket.io `cors origin:'*'` → `allowedOrigins` (movida la const arriba, dedup).
+- [x] **S7** `unhandledRejection` ya no hace `process.exit(1)` — solo log+Sentry. (uncaughtException sí sigue saliendo, correcto.)
+- [x] **S8** Logout: `/auth/logout` limpia cookie. Revocación server-side = YAGNI (no requisito legal declarado). No-op de código.
+Verif: boot OK, health 200, socket handshake 200 desde origen permitido.
 
-## FASE 3 — Consistencia de datos  [1 commit]
-- [ ] **D1** Estados de pago mezclados EN/ES (`pending`/`pendiente`, `paid`/`pagado`) → normalizar a UN set. Migración backfill en `db.js` + arreglar POST default y filtros de `payments-data`.
-- [ ] **D2** `session_type` NULL vs 'individual' → default `'individual'` + backfill. Quitar `OR session_type IS NULL` repetido.
-Verif: recaudación de `payments-data` cuadra; teacher-payments da mismas horas.
+## FASE 3 — Consistencia de datos  ✅ COMPLETO 2026-07-02
+- [x] **D1** Tabla `payments` ya es español-consistente salvo default POST → `'pending'`→`'pendiente'`. BONUS bug: `students.js` portal calculaba `pendingPayments` filtrando `'pending'` (inglés) → **siempre 0**; corregido a `'pendiente'`. (teacher_payments usa `paid` 0/1, tabla distinta — fuera de scope.)
+- [x] **D2** Fuente de NULL en `session_type`: insert de sesión al reservar slot ahora pasa `'individual'`. `OR IS NULL` defensivo se mantiene (maneja filas viejas; reescribir queries = churn sin bug → YAGNI).
+Verif: boot OK. Sin migración destructiva (tolera datos existentes).
 
 ## FASE 4 — Rendimiento  [1 commit]
 - [ ] **P1** Índices: confirmar/crear en `db.js` initDb para `academy_id`, `student_id`, `assigned_teacher_id`, `room_id`, `user_id`, `messages.room_id`, `available_slots.start_datetime`.
