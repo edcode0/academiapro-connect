@@ -37,11 +37,11 @@ Verif: EXPLAIN usa índices; dashboards devuelven mismos datos.
 - [ ] **A3** Extraer `resolveStudentUserId()` del triple-fallback de transcripts send-to-chat.
 Verif: smoke completo tras cada migración; sin cambio de comportamiento.
 
-## FASE 6 — Frontend  🟡 F1/F2 COMPLETO, F3/F4/F5 PENDIENTE
+## FASE 6 — Frontend  ✅ COMPLETO (F1-F5)
 - [x] **F1** `design-system.css` borrado (0 páginas lo cargaban).
 - [x] **F2** `sidebar.js` = fuente única del sidebar. 21 páginas (index + 20) usan `<div id="sidebar-mount" data-role>` + script. Nav por rol (admin/teacher/student), activo por pathname, ids preservados. student_profile.html unificado (tenía nav admin stale). ai_tutor/chat/transcripts intactos (sidebar propio). Verif: screenshots Playwright de los 3 roles = idénticos. Deploy `1819894`.
 - [x] **F3** ✅ CSS del sidebar consolidado en shared-dashboard.css (movido `.user-info`/`.user-info strong`; strip de reglas inline duplicadas en 21 páginas, -1026 líneas). Verif: screenshots Playwright 3 roles = idénticos (diffs 27-119 bytes). Deploy `ef537cd`.
-- [ ] **F4** PENDIENTE — decisión estética del usuario: glassmorphism XOR shared. Cambia el aspecto de la app. NO hacer sin su elección.
+- [x] **F4** ✅ Elegido tema PLANO. glassmorphism.css aplanado en su sitio (quitado blur/blobs, fondos sólidos) en vez de borrarlo (habría roto logout/auth/tablas/toasts que shared no cubre). Verif: screenshots Playwright de 4 tipos de página (dashboard, login, tabla, chat) = flat coherente. Deploy `77cff79`.
 - [x] **F5** ✅ XSS: `escapeHtml` global en global.js + ~53 sinks escapados (chat content/sender/filename/room, nombres en tablas/dropdowns/perfiles, subject/notes/topic). textContent intactos. Verif Playwright: alumno con nombre `<img onerror>` ya NO ejecuta (antes sí). Deploy `510b529`.
 
 ## VOLUMEN RAILWAY ✅ COMPLETO 2026-07-02
