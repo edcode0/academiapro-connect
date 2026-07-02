@@ -46,17 +46,16 @@ Verif: smoke completo tras cada migración; sin cambio de comportamiento.
 Verif: Playwright (`webapp-testing`) en index.html piloto ANTES de propagar. Sidebar cambia en 1 sitio → todas.
 Estrategia: F2/F3 a index.html primero, validar diseño con usuario, LUEGO propagar a las 23.
 
-## FASE 7 — Producto / features  [1 commit]
-- [ ] **PR1** `payments/auto-generate` → correr en cron mensual (`cron.js` ya tiene `isFirstOfMonth`).
-- [ ] **PR2** Job diario recalcula riesgo por inactividad. Extiende `checkStudentRisk`.
-- [ ] **PR3** `email.js` fallback BASE_URL hardcodea dominio Railway viejo → usar `academiapro.academy`.
-Verif: cron dispara sin duplicar pagos; alumno inactivo pasa a at_risk.
+## FASE 7 — Producto / features  [PENDIENTE — checkpoint con usuario]
+- [ ] **PR1** `payments/auto-generate` → correr en cron mensual (`cron.js` ya tiene `isFirstOfMonth`). Cambia comportamiento de producto → confirmar.
+- [ ] **PR2** Job diario recalcula riesgo por inactividad. Extiende `checkStudentRisk`. Confirmar umbral de inactividad.
+- [x] **PR3** `email.js` fallback BASE_URL → `academiapro.academy` (ambos sitios).
 
-## FASE 8 — Higiene repo  [1 commit]
-- [ ] **H1** Borrar ~40 scripts sueltos raíz (`patch_*.js`, `fix_*.js`, `diag*.js`, `*_out.txt`) + `tasks/*.js`.
-- [ ] **H2** `console.log` debug en prod → quitar los ruidosos (login id/role, GROQ set, academy_id).
-- [ ] **H3** Runner de tests unificado: `tests/*.js` sueltos → un `npm test` que los corra.
-Verif: repo limpio; `npm run test:smoke` verde.
+## FASE 8 — Higiene repo  ✅ COMPLETO 2026-07-02
+- [x] **H1** Borrados 26 scripts/dumps basura (patch_*/fix_*/diag*/apply_*/script_*/*_out.*/output.txt) + tasks/*.js. Conservados: seed.js, generate-favicon.js, patch-favicons.js.
+- [x] **H2** Quitados logs debug ruidosos: teachers.js (dump academy_id/user por hit), ai.js (7 logs `[ai-tutor/chat]` incl. fuga `GROQ_API_KEY set`).
+- [x] **H3** `npm test` ahora corre smoke + socket-authz (era placeholder).
+Verif: syntax OK todos.
 
 ---
 

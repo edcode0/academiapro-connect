@@ -26,9 +26,6 @@ router.get('/api/admin/teachers', authenticateJWT, requireAdmin, (req, res, next
     const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
     const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
 
-    console.log('[teachers] academy_id=', req.user.academy_id);
-    console.log(`[/api/admin/teachers] academy_id=${req.user.academy_id}, user=${req.user.name}, role=${req.user.role}, month=${monthStart} to ${monthEnd}`);
-
     const sql = `
         SELECT u.id, u.name, u.email, u.user_code, u.hourly_rate, u.group_hourly_rate,
                COUNT(DISTINCT s.id) as student_count,
@@ -46,7 +43,6 @@ router.get('/api/admin/teachers', authenticateJWT, requireAdmin, (req, res, next
             console.error('[/api/admin/teachers] SQL error:', err.message);
             return next(err);
         }
-        console.log(`[/api/admin/teachers] Found ${result.rows.length} teachers`);
         const teachers = result.rows.map(t => {
             const indivHours = parseFloat(t.individual_hours_this_month || 0);
             const groupHours = parseFloat(t.group_hours_this_month || 0);
