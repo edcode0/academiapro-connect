@@ -210,16 +210,14 @@ router.get('/api/ai/conversations', authenticateJWT, async (req, res, next) => {
 });
 
 // Create new conversation
-router.post('/api/ai/conversations', authenticateJWT, (req, res, next) => {
+router.post('/api/ai/conversations', authenticateJWT, async (req, res, next) => {
     const { title } = req.body;
-    const sql = isPostgres
-        ? 'INSERT INTO ai_conversations (user_id, title) VALUES ($1, $2) RETURNING id'
-        : 'INSERT INTO ai_conversations (user_id, title) VALUES ($1, $2)';
-    db.query(sql, [req.user.id, title || 'Nueva conversación'], (err, result) => {
-        if (err) return next(err);
-        const id = isPostgres ? result.rows[0].id : result.lastID;
+    try {
+        const id = await db.insertReturning('INSERT INTO ai_conversations (user_id, title) VALUES ($1, $2)', [req.user.id, title || 'Nueva conversación']);
         res.json({ id });
-    });
+    } catch (err) {
+        next(err);
+    }
 });
 
 // Pin conversation

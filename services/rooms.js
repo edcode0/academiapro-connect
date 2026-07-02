@@ -27,11 +27,8 @@ module.exports = function makeRoomsService(io) {
             (usersRes.rows || []).forEach(u => { usersMap[u.id] = u.name; });
             const roomName = `${usersMap[u1] || u1} - ${usersMap[u2] || u2}`;
 
-            const insertSql = isPostgres
-                ? "INSERT INTO rooms (academy_id, type, name, created_at) VALUES ($1, 'direct', $2, NOW()) RETURNING id"
-                : "INSERT INTO rooms (academy_id, type, name, created_at) VALUES ($1, 'direct', $2, datetime('now'))";
-            const newR = await db.query(insertSql, [academyId, roomName]);
-            const nrId = isPostgres && newR.rows ? newR.rows[0].id : newR.lastID;
+            const nowExpr = isPostgres ? 'NOW()' : "datetime('now')";
+            const nrId = await db.insertReturning(`INSERT INTO rooms (academy_id, type, name, created_at) VALUES ($1, 'direct', $2, ${nowExpr})`, [academyId, roomName]);
 
             const insertMemberSql = isPostgres
                 ? "INSERT INTO room_members (room_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING"
@@ -52,12 +49,8 @@ module.exports = function makeRoomsService(io) {
         let groupId;
 
         if (!groupRows || groupRows.length === 0) {
-            const insertGroupSql = isPostgres
-                ? "INSERT INTO rooms (academy_id, type, name, created_at) VALUES ($1, 'group', '👥 Profesores & Admin', NOW()) RETURNING id"
-                : "INSERT INTO rooms (academy_id, type, name, created_at) VALUES ($1, 'group', '👥 Profesores & Admin', datetime('now'))";
-
-            const newGroup = await db.query(insertGroupSql, [academyId]);
-            groupId = isPostgres && newGroup.rows ? newGroup.rows[0].id : newGroup.lastID;
+            const nowExpr = isPostgres ? 'NOW()' : "datetime('now')";
+            groupId = await db.insertReturning(`INSERT INTO rooms (academy_id, type, name, created_at) VALUES ($1, 'group', '👥 Profesores & Admin', ${nowExpr})`, [academyId]);
 
             // Delete old "General Profesores" if it exists
             const oldGroup = await db.query("SELECT id FROM rooms WHERE academy_id = $1 AND type = 'group' AND name = 'General Profesores'", [academyId]);

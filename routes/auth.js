@@ -54,12 +54,7 @@ router.post('/auth/register', async (req, res, next) => {
                 userId = existingUser.id;
             } else {
                 try {
-                    const insertSql = !!process.env.DATABASE_URL
-                        ? 'INSERT INTO users (name, email, password_hash, role, academy_id, user_code) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id'
-                        : 'INSERT INTO users (name, email, password_hash, role, academy_id, user_code) VALUES ($1, $2, $3, $4, $5, $6)';
-
-                    const resInsert = await db.query(insertSql, [name, email, hash, role, acad.id, userCode]);
-                    userId = !!process.env.DATABASE_URL && resInsert.rows ? resInsert.rows[0].id : resInsert.lastID;
+                    userId = await db.insertReturning('INSERT INTO users (name, email, password_hash, role, academy_id, user_code) VALUES ($1, $2, $3, $4, $5, $6)', [name, email, hash, role, acad.id, userCode]);
                 } catch (err) {
                     if (err.message.includes('UNIQUE constraint failed') || err.message.includes('duplicate key value')) {
                         return res.status(400).json({ error: 'Este email ya está registrado. Por favor inicia sesión.' });
@@ -76,18 +71,14 @@ router.post('/auth/register', async (req, res, next) => {
                 } else {
                     await db.query('INSERT INTO students (name, parent_email, academy_id, user_id, join_date) VALUES ($1, $2, $3, $4, $5)', [name, email, acad.id, userId, new Date().toISOString().split('T')[0]]);
                 }
-                const insertRoom = !!process.env.DATABASE_URL ? 'INSERT INTO rooms (academy_id, type) VALUES ($1, \'direct\') RETURNING id' : 'INSERT INTO rooms (academy_id, type) VALUES ($1, "direct")';
                 try {
-                    const resRoom = await db.query(insertRoom, [acad.id]);
-                    const roomId = !!process.env.DATABASE_URL && resRoom.rows ? resRoom.rows[0].id : resRoom.lastID;
+                    const roomId = await db.insertReturning("INSERT INTO rooms (academy_id, type) VALUES ($1, 'direct')", [acad.id]);
                     await db.query('INSERT INTO room_members (room_id, user_id) VALUES ($1, $2)', [roomId, userId]);
                     await db.query('INSERT INTO room_members (room_id, user_id) VALUES ($1, $2)', [roomId, acad.owner_id]);
                 } catch (e) { }
             } else if (role === 'teacher') {
-                const insertRoom = !!process.env.DATABASE_URL ? 'INSERT INTO rooms (academy_id, type) VALUES ($1, \'direct\') RETURNING id' : 'INSERT INTO rooms (academy_id, type) VALUES ($1, "direct")';
                 try {
-                    const resRoom = await db.query(insertRoom, [acad.id]);
-                    const roomId = !!process.env.DATABASE_URL && resRoom.rows ? resRoom.rows[0].id : resRoom.lastID;
+                    const roomId = await db.insertReturning("INSERT INTO rooms (academy_id, type) VALUES ($1, 'direct')", [acad.id]);
                     await db.query('INSERT INTO room_members (room_id, user_id) VALUES ($1, $2)', [roomId, userId]);
                     await db.query('INSERT INTO room_members (room_id, user_id) VALUES ($1, $2)', [roomId, acad.owner_id]);
                 } catch (e) { }
@@ -104,25 +95,14 @@ router.post('/auth/register', async (req, res, next) => {
             const sCode = generateCode();
 
             try {
-                const res1 = await db.query(
-                    !!process.env.DATABASE_URL ? 'INSERT INTO academies (name, teacher_code, student_code) VALUES ($1, $2, $3) RETURNING id' : 'INSERT INTO academies (name, teacher_code, student_code) VALUES ($1, $2, $3)',
-                    [academy_name, tCode, sCode]
-                );
-                const acadId = !!process.env.DATABASE_URL && res1.rows ? res1.rows[0].id : res1.lastID;
+                const acadId = await db.insertReturning('INSERT INTO academies (name, teacher_code, student_code) VALUES ($1, $2, $3)', [academy_name, tCode, sCode]);
 
-                const res2 = await db.query(
-                    !!process.env.DATABASE_URL ? 'INSERT INTO users (name, email, password_hash, role, academy_id, user_code) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id' : 'INSERT INTO users (name, email, password_hash, role, academy_id, user_code) VALUES ($1, $2, $3, $4, $5, $6)',
-                    [name, email, hash, 'admin', acadId, userCode]
-                );
-                const userId = !!process.env.DATABASE_URL && res2.rows ? res2.rows[0].id : res2.lastID;
+                const userId = await db.insertReturning('INSERT INTO users (name, email, password_hash, role, academy_id, user_code) VALUES ($1, $2, $3, $4, $5, $6)', [name, email, hash, 'admin', acadId, userCode]);
 
                 await db.query('UPDATE academies SET owner_id = $1 WHERE id = $2', [userId, acadId]);
 
                 try {
-                    const res3 = await db.query(
-                        !!process.env.DATABASE_URL ? "INSERT INTO rooms (academy_id, type, name) VALUES ($1, 'group', '👥 Profesores & Admin') RETURNING id" : "INSERT INTO rooms (academy_id, type, name) VALUES ($1, 'group', '👥 Profesores & Admin')", [acadId]
-                    );
-                    const roomId = !!process.env.DATABASE_URL && res3.rows ? res3.rows[0].id : res3.lastID;
+                    const roomId = await db.insertReturning("INSERT INTO rooms (academy_id, type, name) VALUES ($1, 'group', '👥 Profesores & Admin')", [acadId]);
                     await db.query('INSERT INTO room_members (room_id, user_id) VALUES ($1, $2)', [roomId, userId]);
                 } catch (e) { }
 
@@ -369,18 +349,11 @@ router.get('/auth/google/callback', passport.authenticate('google', { failureRed
             const academyName = `${name}'s Academy`;
             const tCode = generateCode();
             const sCode = generateCode();
-            const resAcad = await db.query(!!process.env.DATABASE_URL
-                ? 'INSERT INTO academies (name, teacher_code, student_code) VALUES ($1, $2, $3) RETURNING id'
-                : 'INSERT INTO academies (name, teacher_code, student_code) VALUES ($1, $2, $3)', [academyName, tCode, sCode]);
-            academyId = !!process.env.DATABASE_URL && resAcad.rows ? resAcad.rows[0].id : resAcad.lastID;
+            academyId = await db.insertReturning('INSERT INTO academies (name, teacher_code, student_code) VALUES ($1, $2, $3)', [academyName, tCode, sCode]);
         }
 
         const userCode = generateUserCode();
-        const resUser = await db.query(!!process.env.DATABASE_URL
-            ? 'INSERT INTO users (name, email, google_id, role, academy_id, user_code) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id'
-            : 'INSERT INTO users (name, email, google_id, role, academy_id, user_code) VALUES ($1, $2, $3, $4, $5, $6)',
-            [name, email, profile.id, role, academyId, userCode]);
-        const userId = !!process.env.DATABASE_URL && resUser.rows ? resUser.rows[0].id : resUser.lastID;
+        const userId = await db.insertReturning('INSERT INTO users (name, email, google_id, role, academy_id, user_code) VALUES ($1, $2, $3, $4, $5, $6)', [name, email, profile.id, role, academyId, userCode]);
 
         if (role === 'admin') {
             await db.query('UPDATE academies SET owner_id = $1 WHERE id = $2', [userId, academyId]);
