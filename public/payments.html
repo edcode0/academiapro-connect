@@ -569,7 +569,7 @@
                 const select = document.getElementById('m_student');
                 select.innerHTML = students
                     .filter(s => s.status !== 'inactive')
-                    .map(s => `<option value="${s.id}">${s.name}</option>`)
+                    .map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`)
                     .join('');
             } catch (err) { console.error(err); }
         }
@@ -628,7 +628,7 @@
                     <td>
                         <div class="student-cell">
                             <div class="avatar" style="background-color: ${avatarColor}">${p.student_name.charAt(0)}</div>
-                            <a href="/student/${p.student_id}" style="color: var(--secondary); text-decoration: none; font-weight: 600;">${p.student_name}</a>
+                            <a href="/student/${p.student_id}" style="color: var(--secondary); text-decoration: none; font-weight: 600;">${escapeHtml(p.student_name)}</a>
                         </div>
                     </td>
                     <td style="color:var(--text-muted); font-size:0.75rem;">${p.student_monthly_fee ? p.student_monthly_fee + '€' : '-'}</td>
@@ -737,7 +737,7 @@
                         const rateWarning = (!p.hourly_rate || p.hourly_rate === 0) ? '<br><span style="color:var(--danger);font-size:0.75rem;">¡Tarifa no configurada!</span>' : '';
                         return `
                         <tr>
-                            <td><strong style="color:var(--primary);">${p.teacher_name}</strong></td>
+                            <td><strong style="color:var(--primary);">${escapeHtml(p.teacher_name)}</strong></td>
                             <td>${p.month}/${p.year}</td>
                             <td>${p.hours.toFixed(1)}h</td>
                             <td>

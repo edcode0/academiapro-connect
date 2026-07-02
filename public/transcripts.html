@@ -670,7 +670,7 @@
                 return `
                 <tr>
                     <td>${new Date(t.created_at).toLocaleDateString()}</td>
-                    <td style="font-weight: 500;">${t.student_name}</td>
+                    <td style="font-weight: 500;">${escapeHtml(t.student_name)}</td>
                     <td><button class="btn btn-outline" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="viewHistory('${js}', ${t.student_id}, ${t.transcript_id || t.id})">Ver resumen</button></td>
                 </tr>
             `}).join('');

@@ -475,9 +475,9 @@
                     ? `<tr><td colspan="4" style="text-align:center; padding:2rem; color:#94a3b8;">No hay alumnos registrados aún. <a href="#" onclick="openModal()" style="color:#6366f1;">Añade el primero →</a></td></tr>`
                     : students.slice(0, 5).map(s => `
                     <tr>
-                        <td style="font-weight: 500"><a href="/student/${s.id}" style="color: var(--accent); text-decoration: none; font-weight: 600;">${s.name}</a></td>
+                        <td style="font-weight: 500"><a href="/student/${s.id}" style="color: var(--accent); text-decoration: none; font-weight: 600;">${escapeHtml(s.name)}</a></td>
                         <td>${s.course}</td>
-                        <td>${s.subject}</td>
+                        <td>${escapeHtml(s.subject)}</td>
                         <td><span class="badge ${s.status === 'active' ? 'badge-active' : 'badge-risk'}">${s.status === 'active' ? 'Activo' : 'En Riesgo'}</span></td>
                     </tr>
                 `).join('');
@@ -529,7 +529,7 @@
             if (res.ok) {
                 const contacts = await res.json();
                 document.getElementById('assigned_teacher_id').innerHTML = '<option value="">Sin asignar</option>' +
-                    contacts.filter(c => c.role === 'teacher').map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+                    contacts.filter(c => c.role === 'teacher').map(t => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
             }
         }
         function closeModal() { document.getElementById('studentModal').style.display = 'none'; }

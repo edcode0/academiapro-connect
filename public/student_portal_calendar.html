@@ -349,7 +349,7 @@
                 slots = slots.filter(s => s !== null && s.id !== undefined);
                 const events = slots.map(s => {
                     let color = 'var(--available)'; // Default green for available
-                    let title = `Disponible con ${s.teacher_name}`;
+                    let title = `Disponible con ${escapeHtml(s.teacher_name)}`;
                     let isMine = false;
                     let isPast = new Date(s.end_datetime) < now;
                     // student_user_id is the users.id of the booked student (from the API join)
@@ -358,7 +358,7 @@
                     if (isPast) {
                         color = 'var(--past)'; // gray
                         if (s.is_booked && s.student_user_id === userData.id) {
-                            title = `Sesión completada con ${s.teacher_name}`;
+                            title = `Sesión completada con ${escapeHtml(s.teacher_name)}`;
                             isMine = true;
                         } else {
                             title = 'No disponible';
@@ -368,7 +368,7 @@
                             // Is it mine or someone else's?
                             if (s.student_user_id === userData.id) {
                                 color = 'var(--booked)'; // blue
-                                title = `Mi Sesión - ${s.teacher_name}`;
+                                title = `Mi Sesión - ${escapeHtml(s.teacher_name)}`;
                                 isMine = true;
                             } else {
                                 color = 'var(--past)'; // gray, occupied by someone else
@@ -412,7 +412,7 @@
             let contentHtml = `
                 <div class="detail-row"><strong>Fecha:</strong> <span style="text-transform: capitalize;">${dateStr}</span></div>
                 <div class="detail-row"><strong>Hora:</strong> <span>${timeStr}</span></div>
-                <div class="detail-row"><strong>Profesor:</strong> <span>${props.teacher_name}</span></div>
+                <div class="detail-row"><strong>Profesor:</strong> <span>${escapeHtml(props.teacher_name)}</span></div>
             `;
 
             let actionsHtml = '';

@@ -398,7 +398,7 @@
                 return `
                     <tr>
                         <td>${new Date(e.date).toLocaleDateString('es-ES')}</td>
-                        <td>${e.subject}</td>
+                        <td>${escapeHtml(e.subject)}</td>
                         <td style="color: ${days <= 3 ? 'var(--danger)' : 'var(--text-muted)'}; font-weight: 500;">
                             ${days <= 0 ? '¡Hoy!' : `en ${days} días`}
                         </td>
@@ -549,7 +549,7 @@
             tbody.innerHTML = exams.map(e => `
                 <tr>
                     <td>${new Date(e.date).toLocaleDateString('es-ES')}</td>
-                    <td>${e.subject}</td>
+                    <td>${escapeHtml(e.subject)}</td>
                     <td>
                         <span class="badge-score ${e.score >= 7 ? 'score-success' : e.score >= 5 ? 'score-warning' : 'score-danger'}">
                             ${e.score}

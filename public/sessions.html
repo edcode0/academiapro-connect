@@ -531,7 +531,7 @@
                 const select = document.getElementById('m_student');
                 select.innerHTML = allStudents
                     .filter(s => s.status !== 'inactive')
-                    .map(s => `<option value="${s.id}">${s.name}</option>`)
+                    .map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`)
                     .join('');
             } catch (err) { console.error(err); }
         }
@@ -579,7 +579,7 @@
                     <td>
                         <div class="student-cell">
                             <div class="avatar" style="background-color: ${avatarColor}">${s.student_name.charAt(0)}</div>
-                            <a href="/student/${s.student_id}" style="color: var(--secondary); text-decoration: none; font-weight: 600;">${s.student_name}</a>
+                            <a href="/student/${s.student_id}" style="color: var(--secondary); text-decoration: none; font-weight: 600;">${escapeHtml(s.student_name)}</a>
                         </div>
                     </td>
                     <td>${s.date}</td>

@@ -57,3 +57,16 @@ function closeMobileNav() {
     aside.classList.remove('mobile-open');
     overlay.classList.remove('active');
 }
+
+// Escape untrusted text before interpolating into innerHTML (audit F5 — XSS guard).
+// Global so every page (all load global.js) can use it; pages with a local
+// escapeHtml keep theirs.
+function escapeHtml(value) {
+    return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+window.escapeHtml = window.escapeHtml || escapeHtml;

@@ -650,7 +650,7 @@
                             : '<span class="badge-individual">👤 Individual</span>';
                         return `
                         <div style="padding: 1rem 0; border-bottom: 1px solid var(--border);">
-                            <p style="font-size: 0.9rem; display:flex; align-items:center; gap:0.5rem;"><strong>${act.student_name}</strong> - Sesión ${typeBadge}</p>
+                            <p style="font-size: 0.9rem; display:flex; align-items:center; gap:0.5rem;"><strong>${escapeHtml(act.student_name)}</strong> - Sesión ${typeBadge}</p>
                             <span style="font-size: 0.75rem; color: #64748b;">${new Date(act.date).toLocaleDateString()}</span>
                         </div>`;
                     }).join('');
@@ -669,9 +669,9 @@
                 document.getElementById('students-table').innerHTML = students.length
                     ? students.map(s => `
                         <tr>
-                            <td><a href="/student/${s.id}" style="color:var(--accent); text-decoration:none; font-weight:600;">${s.name}</a></td>
+                            <td><a href="/student/${s.id}" style="color:var(--accent); text-decoration:none; font-weight:600;">${escapeHtml(s.name)}</a></td>
                             <td>${s.course}</td>
-                            <td>${s.subject}</td>
+                            <td>${escapeHtml(s.subject)}</td>
                             <td><span class="status-badge ${s.status === 'at_risk' ? 'status-risk' : 'status-active'}">${s.status === 'at_risk' ? 'En Riesgo' : 'Activo'}</span></td>
                             <td style="color: #64748b;">${s.last_session ? new Date(s.last_session).toLocaleDateString() : 'Sin sesiones'}</td>
                         </tr>
@@ -715,7 +715,7 @@
                 const res = await fetch('/api/teacher/students', { credentials: 'include' });
                 dbStudents = await res.json();
                 const select = document.getElementById('db-m-student');
-                select.innerHTML = dbStudents.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+                select.innerHTML = dbStudents.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
                 const container = document.getElementById('db-group-students-container');
                 container.innerHTML = dbStudents.map(s => `
                     <label class="group-student-item">

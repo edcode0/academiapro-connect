@@ -752,7 +752,7 @@
                     examsDiv.innerHTML = data.exams.slice(0, 5).map(e => `
                         <div class="list-item">
                             <div class="item-info">
-                                <h5>${e.subject}</h5>
+                                <h5>${escapeHtml(e.subject)}</h5>
                                 <span>${new Date(typeof e.date === 'string' && !e.date.includes('T') ? e.date + 'T12:00:00' : e.date).toLocaleDateString('es-ES', { timeZone: 'Europe/Madrid' })}</span>
                             </div>
                             <div class="score-badge ${e.score >= 7 ? 'score-high' : e.score >= 5 ? 'score-mid' : 'score-low'}">

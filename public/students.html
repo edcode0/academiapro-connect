@@ -568,17 +568,17 @@
                     <td>
                         <div class="student-cell">
                             <div class="avatar" style="background-color: ${avatarColor}">${firstLetter}</div>
-                            <a href="/student/${s.id}" style="color: var(--secondary); text-decoration: none; font-weight: 600;">${s.name}</a>
+                            <a href="/student/${s.id}" style="color: var(--secondary); text-decoration: none; font-weight: 600;">${escapeHtml(s.name)}</a>
                         </div>
                     </td>
                     <td>${s.course}</td>
-                    <td>${s.subject}</td>
+                    <td>${escapeHtml(s.subject)}</td>
                     <td>
                         <span style="color: ${s.teacher_name ? 'inherit' : '#94a3b8'}; font-style: ${s.teacher_name ? 'normal' : 'italic'}">
                             ${s.teacher_name || 'Sin asignar'}
                         </span>
                     </td>
-                    <td>${s.parent_email}</td>
+                    <td>${escapeHtml(s.parent_email)}</td>
                     <td>
                         <span class="status-badge status-${s.status}">
                             ${s.status === 'at_risk' ? 'En Riesgo' : s.status === 'active' ? 'Activo' : 'Inactivo'}

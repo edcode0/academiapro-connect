@@ -714,7 +714,7 @@
             allStudents = await res.json();
             // Populate individual select
             const select = document.getElementById('m_student');
-            select.innerHTML = allStudents.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+            select.innerHTML = allStudents.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
             // Populate group checkbox list
             const container = document.getElementById('group-students-container');
             container.innerHTML = allStudents.map(s => `
@@ -818,7 +818,7 @@
                     : '<span class="badge-individual">👤 Individual</span>';
                 return `
                 <tr>
-                    <td><a href="/student/${s.student_id}" style="color:var(--secondary); font-weight:600; text-decoration:none;">${s.student_name}</a></td>
+                    <td><a href="/student/${s.student_id}" style="color:var(--secondary); font-weight:600; text-decoration:none;">${escapeHtml(s.student_name)}</a></td>
                     <td>${typeBadge}</td>
                     <td>${s.date}</td>
                     <td>${s.duration_minutes} min</td>
