@@ -288,32 +288,8 @@
         <div class="blob blob-3"></div>
     </div>
 
-    <aside>
-        <h1>AcademiaPro</h1>
-        <div class="user-badge">
-            <strong id="sidebarName"
-                style="display:block;color:white;font-size:0.95rem;margin-bottom:0.4rem;">Cargando...</strong>
-            <span class="role-tag">PROFESOR</span>
-            <div style="margin-top:0.5rem;font-size:0.8rem;color:#94a3b8;">
-                Código: <b id="sidebar-code" style="color:white;">---</b>
-            </div>
-        </div>
-        <nav id="mainNav" style="flex:1;">
-            <a href="/teacher/dashboard">👥 Mis Alumnos</a>
-            <a href="/teacher/sessions">📅 Sesiones</a>
-            <a href="/teacher/exams">📝 Exámenes</a>
-            <a href="/teacher/transcripts">📝 Transcripciones</a>
-            <a href="/teacher/calendar">🗓️ Calendario</a>
-            <a href="/ai-tutor">🤖 Asistente IA</a>
-            <a href="/chat">💬 Chat</a>
-            <a href="/teacher/settings">⚙️ Configuración</a>
-        </nav>
-        <div style="margin-top:auto;">
-            <a href="/auth/logout"
-                style="color:#fca5a5;text-decoration:none;padding:0.75rem 1rem;display:block;border-radius:0.5rem;">🚪
-                Cerrar Sesión</a>
-        </div>
-    </aside>
+    <div id="sidebar-mount" data-role="teacher"></div>
+    <script src="/sidebar.js"></script>
 
     <main>
         <div class="page-header">
