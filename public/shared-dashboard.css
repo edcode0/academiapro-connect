@@ -55,6 +55,20 @@ aside h1 {
     margin-bottom: 2.5rem;
 }
 
+/* Sidebar user card — moved here from per-page inline styles (audit F3) */
+.user-info {
+    margin-bottom: 2rem;
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 0.75rem;
+}
+.user-info strong {
+    display: block;
+    color: white;
+    font-size: 0.95rem;
+    margin-bottom: 0.4rem;
+}
+
 nav {
     flex: 1;
 }
