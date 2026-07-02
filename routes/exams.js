@@ -169,12 +169,18 @@ router.get('/api/simulator/results/student/:studentId', authenticateJWT, require
 // Get single result detail
 router.get('/api/simulator/results/:id', authenticateJWT, async (req, res, next) => {
     try {
-        const result = await db.query(
-            `SELECT sr.* FROM simulator_results sr
-             JOIN students s ON sr.student_id = s.id
-             WHERE sr.id = $1 AND s.academy_id = $2`,
-            [req.params.id, req.user.academy_id]
-        );
+        // Students may only read their own results; teachers/admins any in their academy
+        const result = req.user.role === 'student'
+            ? await db.query(
+                `SELECT sr.* FROM simulator_results sr
+                 JOIN students s ON sr.student_id = s.id
+                 WHERE sr.id = $1 AND s.academy_id = $2 AND s.user_id = $3`,
+                [req.params.id, req.user.academy_id, req.user.id])
+            : await db.query(
+                `SELECT sr.* FROM simulator_results sr
+                 JOIN students s ON sr.student_id = s.id
+                 WHERE sr.id = $1 AND s.academy_id = $2`,
+                [req.params.id, req.user.academy_id]);
         const row = result.rows[0];
         if (!row) return res.status(404).json({ error: 'Resultado no encontrado' });
         row.questions = JSON.parse(row.questions_json || '[]');
