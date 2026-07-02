@@ -1,11 +1,31 @@
 const db = require('./db');
 const { createNotification } = require('./notifications');
 const { generateRecurringSlots } = require('./services/recurring');
+const { generateMonthlyPayments } = require('./services/billing');
+const { checkInactivityRisk } = require('./services/risk');
 
 function runDailyJobs() {
     const now = new Date();
     const today = now.toISOString().split('T')[0];
     const isFirstOfMonth = now.getDate() === 1;
+
+    // Daily: flag students who stopped attending as at_risk
+    checkInactivityRisk(now)
+        .then(n => n && console.log(`[Risk] Inactivity sweep flagged ${n} student(s)`))
+        .catch(e => console.error('[Risk] Inactivity sweep error:', e.message));
+
+    // Monthly (1st): auto-generate each academy's pending payments
+    if (isFirstOfMonth) {
+        db.query('SELECT id FROM academies', [], async (err, acadRes) => {
+            if (err || !acadRes?.rows) return;
+            let total = 0;
+            for (const a of acadRes.rows) {
+                try { total += await generateMonthlyPayments(a.id, now); }
+                catch (e) { console.error('[Billing] Auto-generate error for academy', a.id, ':', e.message); }
+            }
+            console.log(`[Billing] Monthly auto-generate: ${total} payment(s) created`);
+        });
+    }
 
     // 1. PAYMENT REMINDERS & OVERDUE NOTIFICATIONS
     db.query(`SELECT p.id, p.amount, p.due_date, st.name as student_name, st.academy_id, st.parent_email,

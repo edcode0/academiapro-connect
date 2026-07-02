@@ -6,6 +6,7 @@ const db       = require('../db');
 const { Resend } = require('resend');
 const { authenticateJWT } = require('../middleware/auth');
 const { requireAdmin, requireTeacherOrAdmin } = require('../middleware/roles');
+const { generateMonthlyPayments } = require('../services/billing');
 
 router.post('/api/payments', authenticateJWT, requireTeacherOrAdmin, async (req, res, next) => {
     try {
@@ -69,32 +70,13 @@ router.get('/api/payments-data', authenticateJWT, (req, res, next) => {
     });
 });
 
-router.post('/api/payments/auto-generate', authenticateJWT, requireAdmin, (req, res, next) => {
-    const acadId = req.user.academy_id;
-    const now = new Date();
-    const month = now.getMonth() + 1;
-    const year = now.getFullYear();
-    const lastDayOfMonth = new Date(year, month, 0).getDate();
-
-    db.query('SELECT * FROM students WHERE academy_id = $1 AND monthly_fee > 0', [acadId], (err, result) => {
-        if (err) return next(err);
-        const students = result.rows || [];
-
-        students.forEach(s => {
-            const payDay = s.payment_day || 1;
-            const validDay = Math.min(payDay, lastDayOfMonth);
-            const dueDate = `${year}-${String(month).padStart(2, '0')}-${String(validDay).padStart(2, '0')}`;
-
-            db.query('SELECT id FROM payments WHERE student_id = $1 AND amount = $2 AND due_date = $3',
-                [s.id, s.monthly_fee, dueDate], (err, exRes) => {
-                    if (!exRes || !exRes.rows || exRes.rows.length === 0) {
-                        db.query("INSERT INTO payments (student_id, amount, due_date, status) VALUES ($1, $2, $3, 'pendiente')",
-                            [s.id, s.monthly_fee, dueDate]);
-                    }
-                });
-        });
-        res.json({ success: true, count: students.length });
-    });
+router.post('/api/payments/auto-generate', authenticateJWT, requireAdmin, async (req, res, next) => {
+    try {
+        const created = await generateMonthlyPayments(req.user.academy_id);
+        res.json({ success: true, created });
+    } catch (err) {
+        next(err);
+    }
 });
 
 router.get('/api/teacher-payments', authenticateJWT, requireAdmin, (req, res, next) => {
