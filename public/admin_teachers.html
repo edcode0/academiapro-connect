@@ -629,7 +629,7 @@
                     <div class="teacher-card-header">
                         <div class="avatar-lg" style="background: ${color}">${avatarLetter}</div>
                         <div style="flex:1; min-width:0;">
-                            <div class="teacher-name">${t.name}</div>
+                            <div class="teacher-name">${escapeHtml(t.name)}</div>
                             <span class="badge-teacher">Profesor</span>
                             <div class="teacher-code">Código: ${t.user_code || 'N/A'}</div>
                         </div>

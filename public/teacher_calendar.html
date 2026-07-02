@@ -820,7 +820,7 @@
                 const sRes = await fetch('/api/teacher/students', { credentials: 'include' });
                 if (sRes.ok) {
                     myStudents = await sRes.json();
-                    const opts = myStudents.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+                    const opts = myStudents.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
                     document.getElementById('c_student').innerHTML = '<option value="">— Hora libre —</option>' + opts;
                     document.getElementById('d_assign_student').innerHTML = '<option value="">— Selecciona —</option>' + opts;
                     // Group checkboxes for create modal
@@ -981,7 +981,7 @@
                     const evDate = new Date(startLocal); evDate.setHours(0, 0, 0, 0);
                     const todayD = new Date(); todayD.setHours(0, 0, 0, 0);
                     if (evDate < todayD) { color = '#94a3b8'; }
-                    if (s.notes) title += ` · ${s.notes}`;
+                    if (s.notes) title += ` · ${escapeHtml(s.notes)}`;
                     return {
                         id: s.id,
                         title,

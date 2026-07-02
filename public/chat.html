@@ -704,15 +704,15 @@
             });
 
             container.innerHTML = rooms.map(room => {
-                const initials = (room.name || 'Chat').split(' ').map(n => n[0]).join('').substring(0, 2);
+                const initials = escapeHtml((room.name || 'Chat').split(' ').map(n => n[0]).join('').substring(0, 2));
                 return `
                     <div class="room-item ${activeRoom && activeRoom.id === room.id ? 'active' : ''}" onclick="selectRoom(${JSON.stringify(room).replace(/"/g, '&quot;')})">
                         <div class="avatar ${room.type === 'group' ? 'group' : ''}">${initials}</div>
                         <div class="room-info">
                             <div class="room-header">
-                                <span class="room-name">${room.name || 'Chat'}</span>
+                                <span class="room-name">${escapeHtml(room.name || 'Chat')}</span>
                             </div>
-                            <div class="last-msg">${room.last_message || 'Sin mensajes'}</div>
+                            <div class="last-msg">${escapeHtml(room.last_message || 'Sin mensajes')}</div>
                         </div>
                         ${room.unread_count > 0 ? `<div class="unread-badge">${room.unread_count}</div>` : ''}
                     </div>
@@ -774,22 +774,24 @@
             let fileHTML = '';
 
             if (msg.file_url) {
+                const safeUrl = encodeURI(msg.file_url);
+                const safeName = escapeHtml(msg.file_name);
                 if (msg.file_type && msg.file_type.startsWith('image/')) {
-                    fileHTML = `<img src="${msg.file_url}" style="max-width:200px;border-radius:8px;margin-top:4px;display:block;">`;
+                    fileHTML = `<img src="${safeUrl}" style="max-width:200px;border-radius:8px;margin-top:4px;display:block;">`;
                 } else if (msg.file_type === 'application/pdf') {
-                    fileHTML = `<a href="${msg.file_url}" target="_blank" style="display:flex;align-items:center;gap:6px;background:rgba(99,102,241,0.1);padding:8px 12px;border-radius:8px;margin-top:4px;text-decoration:none;color:#6366f1;">📄 ${msg.file_name} <span style="font-size:0.8em">Abrir PDF</span></a>`;
+                    fileHTML = `<a href="${safeUrl}" target="_blank" style="display:flex;align-items:center;gap:6px;background:rgba(99,102,241,0.1);padding:8px 12px;border-radius:8px;margin-top:4px;text-decoration:none;color:#6366f1;">📄 ${safeName} <span style="font-size:0.8em">Abrir PDF</span></a>`;
                 } else {
-                    fileHTML = `<a href="${msg.file_url}" target="_blank" style="display:flex;align-items:center;gap:6px;background:rgba(99,102,241,0.1);padding:8px 12px;border-radius:8px;margin-top:4px;text-decoration:none;color:#6366f1;">📎 ${msg.file_name}</a>`;
+                    fileHTML = `<a href="${safeUrl}" target="_blank" style="display:flex;align-items:center;gap:6px;background:rgba(99,102,241,0.1);padding:8px 12px;border-radius:8px;margin-top:4px;text-decoration:none;color:#6366f1;">📎 ${safeName}</a>`;
                 }
             }
 
             return `<div class="msg ${isMine ? 'sent' : 'received'}" data-id="${msg.id}">
         <div class="bubble">
-            ${msg.content ? `<div>${msg.content}</div>` : ''}
+            ${msg.content ? `<div>${escapeHtml(msg.content)}</div>` : ''}
             ${fileHTML}
         </div>
         <div class="msg-info">
-            ${!isMine ? `<span>${msg.sender_name || (activeRoom && activeRoom.name) || ''}</span>` : ''}
+            ${!isMine ? `<span>${escapeHtml(msg.sender_name || (activeRoom && activeRoom.name) || '')}</span>` : ''}
             <span class="time">${new Date(msg.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
         </div>
     </div>`;

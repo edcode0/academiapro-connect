@@ -873,7 +873,7 @@
                     <td>
                         <div class="student-cell">
                             <div class="avatar" style="background:${color}">${s.name.charAt(0)}</div>
-                            <a href="/student/${s.id}" style="color:var(--accent);text-decoration:none;font-weight:600;">${s.name}</a>
+                            <a href="/student/${s.id}" style="color:var(--accent);text-decoration:none;font-weight:600;">${escapeHtml(s.name)}</a>
                         </div>
                     </td>
                     <td>${s.course || '-'}</td>
@@ -968,7 +968,7 @@
                         const slots = await res.json();
                         successCallback(slots.map(s => ({
                             id: s.id,
-                            title: s.student_name ? `📌 ${s.student_name}` : '🟢 Disponible',
+                            title: s.student_name ? `📌 ${escapeHtml(s.student_name)}` : '🟢 Disponible',
                             start: s.start_datetime,
                             end: s.end_datetime,
                             backgroundColor: s.is_booked ? '#3b82f6' : '#10b981',
@@ -1023,7 +1023,7 @@
             const assigned = new Set(teacherData.students.map(s => s.id));
             const unassigned = students.filter(s => !assigned.has(s.id));
             if (!unassigned.length) { showToast('Todos los alumnos ya están asignados'); return; }
-            document.getElementById('assignStudentSelect').innerHTML = unassigned.map(s => `<option value="${s.id}">${s.name} (${s.course})</option>`).join('');
+            document.getElementById('assignStudentSelect').innerHTML = unassigned.map(s => `<option value="${s.id}">${escapeHtml(s.name)} (${escapeHtml(s.course)})</option>`).join('');
             document.getElementById('assignModal').style.display = 'flex';
         }
 

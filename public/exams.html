@@ -494,7 +494,7 @@
             const select = document.getElementById('m_student');
             select.innerHTML = students
                 .filter(s => s.status !== 'inactive')
-                .map(s => `<option value="${s.id}">${s.name}</option>`)
+                .map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`)
                 .join('');
         }
 
@@ -534,7 +534,7 @@
                     <td>
                         <div class="student-cell">
                             <div class="avatar" style="background-color: ${avatarColor}">${r.student_name.charAt(0)}</div>
-                            <a href="/student/${r.student_id}" style="color: var(--secondary); text-decoration: none; font-weight: 600;">${r.student_name}</a>
+                            <a href="/student/${r.student_id}" style="color: var(--secondary); text-decoration: none; font-weight: 600;">${escapeHtml(r.student_name)}</a>
                         </div>
                     </td>
                     <td>${r.main_subject}</td>
@@ -564,9 +564,9 @@
 
                 return `
                 <tr>
-                    <td><strong>${e.student_name}</strong></td>
+                    <td><strong>${escapeHtml(e.student_name)}</strong></td>
                     <td>${e.date}</td>
-                    <td>${e.subject}</td>
+                    <td>${escapeHtml(e.subject)}</td>
                     <td><span class="score-badge ${scoreClass}">${e.score}</span></td>
                     <td><button onclick="deleteExam(${e.id})" style="border:none; background:none; cursor:pointer;">🗑️</button></td>
                 </tr>

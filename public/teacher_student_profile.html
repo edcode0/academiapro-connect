@@ -677,7 +677,7 @@
             document.getElementById('exams-table').innerHTML = exams.map(e => `
                 <tr>
                     <td>${new Date(e.date).toLocaleDateString('es-ES')}</td>
-                    <td>${e.subject}</td>
+                    <td>${escapeHtml(e.subject)}</td>
                     <td>
                         <span class="score-badge" style="background:${e.score >= 5 ? 'var(--success)' : 'var(--danger)'}">
                             ${e.score || '-'}
@@ -695,7 +695,7 @@
                 document.getElementById('simulacros-table').innerHTML = sims.map(s => `
                     <tr>
                         <td>${new Date(s.created_at).toLocaleDateString('es-ES')}</td>
-                        <td>${s.topic}</td>
+                        <td>${escapeHtml(s.topic)}</td>
                         <td><strong>${s.percentage}%</strong></td>
                         <td>${s.teacher_grade ? `<span class="score-badge" style="background:var(--primary); font-size:12px;">${s.teacher_grade}/10</span>` : '<span style="color:var(--text-muted)">Pendiente</span>'}</td>
                         <td>

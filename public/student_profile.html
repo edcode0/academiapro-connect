@@ -808,7 +808,7 @@
                     return `
                         <tr>
                             <td>${e.date}</td>
-                            <td>${e.subject}</td>
+                            <td>${escapeHtml(e.subject)}</td>
                             <td><div class="score-badge ${colorClass}">${e.score}</div></td>
                         </tr>
                     `;
@@ -1294,7 +1294,7 @@
                         list.innerHTML = sims.map(s => `
                             <tr>
                                 <td>${new Date(s.created_at).toLocaleDateString('es-ES')}</td>
-                                <td>${s.topic}</td>
+                                <td>${escapeHtml(s.topic)}</td>
                                 <td><strong>${s.percentage}%</strong></td>
                                 <td>${s.teacher_grade ? `<span style="font-weight:700; color:var(--primary);">${s.teacher_grade}/10</span>` : '<span style="color:var(--text-muted)">Pendiente</span>'}</td>
                                 <td>

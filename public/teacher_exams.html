@@ -358,7 +358,7 @@
         async function loadStudents() {
             const res = await fetch('/api/teacher/students');
             const students = await res.json();
-            document.getElementById('m_student').innerHTML = students.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+            document.getElementById('m_student').innerHTML = students.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
         }
 
         async function loadExams() {
@@ -375,9 +375,9 @@
             const tbody = document.getElementById('examsTableBody');
             tbody.innerHTML = allExams.map(e => `
                 <tr>
-                    <td>${e.student_name}</td>
+                    <td>${escapeHtml(e.student_name)}</td>
                     <td>${e.date}</td>
-                    <td>${e.subject}</td>
+                    <td>${escapeHtml(e.subject)}</td>
                     <td><span class="score-badge ${e.score >= 5 ? 'score-good' : 'score-bad'}">${e.score}</span></td>
                     <td><button style="border:none; cursor:pointer; background:none;" onclick="deleteExam(${e.id})">🗑️</button></td>
                 </tr>
