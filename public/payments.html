@@ -732,8 +732,8 @@
                     let totalToPay = 0;
 
                     tbody.innerHTML = payments.map(p => {
-                        if (p.status === 'pending') totalToPay += p.total_amount;
-                        const statusBadge = p.status === 'paid' ? '<span class="badge badge-pagado">Pagado</span>' : '<span class="badge badge-pendiente">Pendiente</span>';
+                        if (!p.paid) totalToPay += p.total_amount;
+                        const statusBadge = p.paid ? '<span class="badge badge-pagado">Pagado</span>' : '<span class="badge badge-pendiente">Pendiente</span>';
                         const rateWarning = (!p.hourly_rate || p.hourly_rate === 0) ? '<br><span style="color:var(--danger);font-size:0.75rem;">¡Tarifa no configurada!</span>' : '';
                         return `
                         <tr>
@@ -750,7 +750,7 @@
                             <td><strong>${p.total_amount}€</strong></td>
                             <td>${statusBadge} <br><span style="font-size:0.75rem; color:var(--text-muted);">${p.paid_at || ''}</span></td>
                             <td>
-                                ${p.status === 'pending' ? `<button class="btn btn-primary" style="padding:0.4rem 0.75rem; font-size:0.75rem;" onclick="markTeacherAsPaid(${p.id})">Marcar Pagado</button>` : '-'}
+                                ${!p.paid ? `<button class="btn btn-primary" style="padding:0.4rem 0.75rem; font-size:0.75rem;" onclick="markTeacherAsPaid(${p.id})">Marcar Pagado</button>` : '-'}
                             </td>
                         </tr>
                         `;
