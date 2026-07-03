@@ -613,9 +613,7 @@
             renderLinks(data.links || []);
         }
 
-        function escapeHtml(str) {
-            return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-        }
+        // escapeHtml provided globally by global.js (escapes ' too)
 
         function renderLinks(links) {
             const container = document.getElementById('links-list');

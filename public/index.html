@@ -488,7 +488,7 @@
 
                 const payRes = await fetch('/api/payments', { credentials: 'include' });
                 const payments = await payRes.json();
-                const pending = payments.reduce((acc, p) => acc + (p.status === 'pending' ? p.amount : 0), 0);
+                const pending = payments.reduce((acc, p) => acc + ((p.status !== 'pagado' && p.status !== 'paid') ? p.amount : 0), 0);
                 document.getElementById('pending-payments').textContent = `${pending} €`;
                 if (pending > 0) {
                     const card = document.getElementById('card-payments');

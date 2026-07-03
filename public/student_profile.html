@@ -823,9 +823,9 @@
                     <tr>
                         <td style="font-weight:600">${p.amount} €</td>
                         <td>${p.due_date}</td>
-                        <td><span class="badge ${p.status === 'paid' ? 'badge-paid' : 'badge-pending'}">${p.status === 'paid' ? 'Pagado' : 'Pendiente'}</span></td>
+                        <td><span class="badge ${(p.status === 'pagado' || p.status === 'paid') ? 'badge-paid' : 'badge-pending'}">${(p.status === 'pagado' || p.status === 'paid') ? 'Pagado' : 'Pendiente'}</span></td>
                         <td>
-                            ${p.status === 'pending' ? '<button class="btn-reminder" onclick="sendReminder(' + p.id + ')">Enviar Recordatorio</button>' : '-'}
+                            ${(p.status !== 'pagado' && p.status !== 'paid') ? '<button class="btn-reminder" onclick="sendReminder(' + p.id + ')">Enviar Recordatorio</button>' : '-'}
                         </td>
                     </tr>
                 `).join('') || '<tr><td colspan="4" style="text-align:center">No hay pagos registrados</td></tr>';
@@ -845,9 +845,7 @@
             }
         }
 
-        function escapeHtml(str) {
-            return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-        }
+        // escapeHtml provided globally by global.js (escapes ' too)
 
         function renderLinks(links) {
             const container = document.getElementById('links-list');
