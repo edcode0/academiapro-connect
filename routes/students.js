@@ -260,17 +260,22 @@ router.get('/api/student/portal-data', authenticateJWT, async (req, res, next) =
             return res.json(defaultResponse);
         }
 
-        let sessionsR = { rows: [] }, examsR = { rows: [] }, paymentsR = { rows: [] }, linksR = { rows: [] };
-
-        try { sessionsR = await db.query('SELECT * FROM sessions WHERE student_id = $1 ORDER BY date DESC LIMIT 5', [student.id]); } catch(e) { console.error('sessions query error:', e.message); }
-        try { examsR = await db.query('SELECT * FROM exams WHERE student_id = $1 ORDER BY date DESC LIMIT 5', [student.id]); } catch(e) { console.error('exams query error:', e.message); }
-        try { paymentsR = await db.query('SELECT * FROM payments WHERE student_id = $1 ORDER BY due_date DESC LIMIT 5', [student.id]); } catch(e) { console.error('payments query error:', e.message); }
-        try { linksR = await db.query('SELECT id, label, url FROM student_links WHERE student_id = $1 AND academy_id = $2 ORDER BY created_at DESC', [student.id, req.user.academy_id]); } catch(e) { console.error('links query error:', e.message); }
-
-        const sessions = sessionsR.rows || [];
-        const exams = examsR.rows || [];
-        const payments = paymentsR.rows || [];
-        const links = linksR.rows || [];
+        // Independent queries — run in parallel; tolerate a single query failing (allSettled)
+        const [sessionsR, examsR, paymentsR, linksR] = await Promise.allSettled([
+            db.query('SELECT * FROM sessions WHERE student_id = $1 ORDER BY date DESC LIMIT 5', [student.id]),
+            db.query('SELECT * FROM exams WHERE student_id = $1 ORDER BY date DESC LIMIT 5', [student.id]),
+            db.query('SELECT * FROM payments WHERE student_id = $1 ORDER BY due_date DESC LIMIT 5', [student.id]),
+            db.query('SELECT id, label, url FROM student_links WHERE student_id = $1 AND academy_id = $2 ORDER BY created_at DESC', [student.id, req.user.academy_id])
+        ]);
+        const rowsOf = (r, label) => {
+            if (r.status === 'fulfilled') return r.value.rows || [];
+            console.error(`${label} query error:`, r.reason?.message);
+            return [];
+        };
+        const sessions = rowsOf(sessionsR, 'sessions');
+        const exams = rowsOf(examsR, 'exams');
+        const payments = rowsOf(paymentsR, 'payments');
+        const links = rowsOf(linksR, 'links');
 
         res.json({
             student,

@@ -288,7 +288,7 @@
                 tbody.innerHTML = payments.map(p => {
                     const today = new Date().toISOString().split('T')[0];
                     let status = p.status;
-                    if (status === 'pending' && p.due_date < today) status = 'vencido';
+                    if ((status === 'pendiente' || status === 'pending') && p.due_date < today) status = 'vencido';
 
                     return `
                         <tr>
