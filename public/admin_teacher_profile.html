@@ -928,8 +928,8 @@
                 <td>${parseFloat(p.hours).toFixed(1)}h</td>
                 <td>${p.hourly_rate}€/h</td>
                 <td><strong>${parseFloat(p.total).toFixed(2)}€</strong></td>
-                <td><span class="badge ${p.status === 'paid' ? 'badge-paid' : 'badge-pending'}">${p.status === 'paid' ? '✓ Pagado' : 'Pendiente'}</span></td>
-                <td>${p.paid_date || '-'}</td>
+                <td><span class="badge ${p.paid ? 'badge-paid' : 'badge-pending'}">${p.paid ? '✓ Pagado' : 'Pendiente'}</span></td>
+                <td>${p.paid_at || '-'}</td>
             </tr>`).join('');
         }
 
