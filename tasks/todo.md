@@ -58,6 +58,18 @@ Verif: smoke completo tras cada migración; sin cambio de comportamiento.
 - [x] **H3** `npm test` ahora corre smoke + socket-authz (era placeholder).
 Verif: syntax OK todos.
 
+## INCIDENTE TRANSCRIPCIONES — 2026-07-30  [código arreglado, pendiente deploy + cuota]
+Síntoma: no se leen transcripciones ni llegan a los chats de los alumnos.
+Causa raíz (logs Railway `web`): bucle de reproceso agota los 100k tokens/día de Groq (tier free) → todo 429.
+- [x] **T1** Cap `MAX_PER_RUN = 5` emails por ejecución en `services/gmail.js`.
+- [x] **T2** Abortar lote al primer 429 de Groq (antes hacía ~31 llamadas condenadas por tick).
+- [x] **T3** No mover `gmail_last_check` si el lote se cortó (Gmail es newest-first: avanzar perdería los antiguos).
+- [x] **T4** `invalid_grant` → limpiar tokens + notificar al profesor (profes 1 y 9 llevaban días caídos en silencio).
+- [x] **T5** `tests/gmail-resilience.js` (4 casos) + wired en `npm test`.
+- [ ] **T6** DECISIÓN USUARIO: subir Groq a Dev Tier. 100k TPD es poco margen aunque el bucle esté arreglado (comparte cuota con el tutor IA).
+- [ ] **T7** Tras deploy: verificar drenaje del backlog de 32 (5 por tick, ~2h) y avisar a profes 1 y 9 de reconectar Gmail.
+Verif: 65/65 smoke · homework-reminders OK · 4/4 gmail-resilience.
+
 ---
 
 ## Notas de ejecución

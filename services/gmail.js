@@ -12,6 +12,14 @@ const { makeOAuth2Client }   = require('./calendar');
 
 const isPostgres = !!process.env.DATABASE_URL;
 
+// Bound Groq token burn per run: a backlog of N emails must not be re-analyzed
+// in full on every 15-min tick (that exhausts the daily token quota in minutes).
+// Processed emails become duplicates next run, so the backlog drains monotonically.
+const MAX_PER_RUN = 5;
+
+const isRateLimit = (err) =>
+    err?.status === 429 || /rate.?limit|429/i.test(err?.message || '');
+
 /**
  * Factory: returns { checkAndProcessTranscripts } bound to the given io instance.
  * Call once after io is created: const gmailService = require('./services/gmail')(io);
@@ -47,14 +55,34 @@ module.exports = function makeGmailService(io) {
         // Paginate through all results so no emails are missed when first page is all duplicates
         const messages = [];
         let pageToken;
-        do {
-            const pageRes = await gmail.users.messages.list({
-                userId: 'me', q: searchQuery, maxResults: 50,
-                ...(pageToken && { pageToken })
-            });
-            (pageRes.data.messages || []).forEach(m => messages.push(m));
-            pageToken = pageRes.data.nextPageToken;
-        } while (pageToken); // exhaust all pages — query is already bounded by after:${lastCheck}
+        try {
+            do {
+                const pageRes = await gmail.users.messages.list({
+                    userId: 'me', q: searchQuery, maxResults: 50,
+                    ...(pageToken && { pageToken })
+                });
+                (pageRes.data.messages || []).forEach(m => messages.push(m));
+                pageToken = pageRes.data.nextPageToken;
+            } while (pageToken); // exhaust all pages — query is already bounded by after:${lastCheck}
+        } catch (err) {
+            // Revoked/expired refresh token: polling can never recover on its own.
+            // Clear the tokens so the UI shows "disconnected" and the teacher reconnects,
+            // instead of failing silently on every tick forever.
+            if (/invalid_grant/i.test(err.message || '')) {
+                console.warn(`[Gmail] invalid_grant for teacher ${teacher.id} — clearing tokens, reconnect required`);
+                await db.query(
+                    'UPDATE users SET gmail_access_token=NULL, gmail_refresh_token=NULL, gmail_token_expiry=NULL WHERE id=$1',
+                    [teacher.id]
+                ).catch(e => console.error('[Gmail] Token clear failed:', e.message));
+                await createNotification(teacher.id, teacher.academy_id, 'system',
+                    '⚠️ Gmail desconectado',
+                    'Tu conexión con Gmail ha caducado. Reconéctala en Ajustes para seguir recibiendo las transcripciones.',
+                    '/teacher/settings'
+                );
+                return 0;
+            }
+            throw err;
+        }
 
         if (!messages.length) {
             console.log('[Gmail] No new transcript emails found');
@@ -63,9 +91,15 @@ module.exports = function makeGmailService(io) {
         }
 
         let processed = 0;
+        let stoppedEarly = false; // cap or quota hit: unseen (older) emails still pending
         let batchEarliestMs = null; // track oldest email in batch for reliable retry
 
         for (const msg of messages) {
+            if (processed >= MAX_PER_RUN) {
+                console.log(`[Gmail] Batch cap ${MAX_PER_RUN} reached — ${messages.length} found, rest next run`);
+                stoppedEarly = true;
+                break;
+            }
             try {
                 // Deduplication: skip already-processed messages
                 const existing = await db.query('SELECT id FROM transcripts WHERE gmail_msg_id = $1', [msg.id]);
@@ -138,16 +172,28 @@ module.exports = function makeGmailService(io) {
 
                 // Analyze with Groq
                 const studentNames = students.map(s => s.name).join(', ');
-                const analysis = await groqClient.chat.completions.create({
-                    model:    'llama-3.3-70b-versatile',
-                    messages: [{
-                        role:    'user',
-                        content: `Analiza esta transcripción de clase y genera un resumen estructurado.\n\nAlumnos posibles: ${studentNames}\n\nTranscripción:\n${body.substring(0, 8000)}\n\nResponde SOLO en JSON con este formato exacto:\n{\n  "student_name": "nombre del alumno identificado o más probable",\n  "resumen": "Resumen de lo tratado en clase en 2-3 frases",\n  "conceptos_clave": ["concepto 1", "concepto 2"],\n  "deberes": ["tarea 1", "tarea 2"],\n  "pistas_profesor": ["consejo o observación del profesor 1"],\n  "proximos_pasos": ["próximo tema 1"],\n  "mensaje_motivador": "Mensaje corto de ánimo para el alumno"\n}`
-                    }],
-                    max_tokens:      1000,
-                    temperature:     0.3,
-                    response_format: { type: 'json_object' }
-                });
+                let analysis;
+                try {
+                    analysis = await groqClient.chat.completions.create({
+                        model:    'llama-3.3-70b-versatile',
+                        messages: [{
+                            role:    'user',
+                            content: `Analiza esta transcripción de clase y genera un resumen estructurado.\n\nAlumnos posibles: ${studentNames}\n\nTranscripción:\n${body.substring(0, 8000)}\n\nResponde SOLO en JSON con este formato exacto:\n{\n  "student_name": "nombre del alumno identificado o más probable",\n  "resumen": "Resumen de lo tratado en clase en 2-3 frases",\n  "conceptos_clave": ["concepto 1", "concepto 2"],\n  "deberes": ["tarea 1", "tarea 2"],\n  "pistas_profesor": ["consejo o observación del profesor 1"],\n  "proximos_pasos": ["próximo tema 1"],\n  "mensaje_motivador": "Mensaje corto de ánimo para el alumno"\n}`
+                        }],
+                        max_tokens:      1000,
+                        temperature:     0.3,
+                        response_format: { type: 'json_object' }
+                    });
+                } catch (e) {
+                    // Quota exhausted: every remaining email in this batch would fail too.
+                    // Abort the run instead of burning one doomed call per email.
+                    if (isRateLimit(e)) {
+                        stoppedEarly = true;
+                        console.warn('[Gmail] Groq rate limit — batch aborted, retry next run:', e.message);
+                        break;
+                    }
+                    throw e;
+                }
 
                 let analysisData;
                 try {
@@ -333,7 +379,12 @@ module.exports = function makeGmailService(io) {
         //   failed emails remain in range for the next cron run.
         // - If all messages were duplicates (batchEarliestMs still null): advance to
         //   NOW() to avoid infinite rescanning of the same already-processed range.
-        if (batchEarliestMs) {
+        // Gmail returns newest-first, so emails we never reached are OLDER than anything
+        // fetched. Moving the window at all would drop them permanently — leave it alone
+        // and let the next run re-query the same range (already-saved ones are deduped).
+        if (stoppedEarly) {
+            console.log(`[Gmail] Window kept at ${new Date(lastCheck * 1000).toISOString()} — pending emails remain`);
+        } else if (batchEarliestMs) {
             const nextCheck = new Date(batchEarliestMs - 1000).toISOString();
             await db.query('UPDATE users SET gmail_last_check=$1 WHERE id=$2', [nextCheck, teacher.id])
                 .catch(err => console.error('[Gmail] Last check update failed:', err.message));

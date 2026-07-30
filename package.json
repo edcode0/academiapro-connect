@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node index.js",
     "dev": "node --watch index.js",
-    "test": "npm run test:smoke && npm run test:socket-authz",
+    "test": "npm run test:smoke && npm run test:socket-authz && npm run test:gmail",
+    "test:gmail": "node tests/gmail-resilience.js",
     "test:smoke": "node tests/smoke.js",
     "test:socket-authz": "node tests/socket-authz.js"
   },
