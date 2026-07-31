@@ -20,6 +20,30 @@ const MAX_PER_RUN = 5;
 const isRateLimit = (err) =>
     err?.status === 429 || /rate.?limit|429/i.test(err?.message || '');
 
+// A stalled run (emails found, none processed) is invisible otherwise: errors go to
+// console.error and die there. That is how a 32-email backlog went unnoticed for days.
+// ponytail: in-memory throttle, so a restart re-arms the alert. Good enough for a
+// once-a-day digest; move to a users column if restarts ever get frequent.
+const alertedOn = new Map(); // teacher.id -> 'YYYY-MM-DD'
+
+async function alertAdmins(teacher, title, message) {
+    const today = new Date().toISOString().slice(0, 10);
+    if (alertedOn.get(teacher.id) === today) return;
+    alertedOn.set(teacher.id, today);
+
+    const admins = await db.query(
+        "SELECT id FROM users WHERE academy_id = $1 AND role = 'admin'",
+        [teacher.academy_id]
+    ).catch(err => {
+        console.error('[Gmail] Admin lookup for alert failed:', err.message);
+        return { rows: [] };
+    });
+
+    for (const admin of admins.rows || []) {
+        await createNotification(admin.id, teacher.academy_id, 'system', title, message, '/admin/transcripts');
+    }
+}
+
 /**
  * Factory: returns { checkAndProcessTranscripts } bound to the given io instance.
  * Call once after io is created: const gmailService = require('./services/gmail')(io);
@@ -79,6 +103,10 @@ module.exports = function makeGmailService(io) {
                     'Tu conexión con Gmail ha caducado. Reconéctala en Ajustes para seguir recibiendo las transcripciones.',
                     '/teacher/settings'
                 );
+                await alertAdmins(teacher,
+                    '⚠️ Gmail desconectado de un profesor',
+                    `La conexión de Gmail de ${teacher.name} ha caducado, así que sus transcripciones no llegan. Debe reconectarla en Ajustes.`
+                );
                 return 0;
             }
             throw err;
@@ -91,7 +119,9 @@ module.exports = function makeGmailService(io) {
         }
 
         let processed = 0;
-        let stoppedEarly = false; // cap or quota hit: unseen (older) emails still pending
+        let skipped = 0;            // already-processed duplicates: not a stall
+        let stoppedEarly = false;   // cap or quota hit: unseen (older) emails still pending
+        let stallReason = null;     // why nothing got through, for the admin alert
         let batchEarliestMs = null; // track oldest email in batch for reliable retry
 
         for (const msg of messages) {
@@ -105,6 +135,7 @@ module.exports = function makeGmailService(io) {
                 const existing = await db.query('SELECT id FROM transcripts WHERE gmail_msg_id = $1', [msg.id]);
                 if ((existing.rows || []).length > 0) {
                     console.log('[Gmail] Skipping duplicate transcript for message:', msg.id);
+                    skipped++;
                     continue;
                 }
 
@@ -189,6 +220,7 @@ module.exports = function makeGmailService(io) {
                     // Abort the run instead of burning one doomed call per email.
                     if (isRateLimit(e)) {
                         stoppedEarly = true;
+                        stallReason = 'se ha alcanzado el límite diario de la IA (Groq)';
                         console.warn('[Gmail] Groq rate limit — batch aborted, retry next run:', e.message);
                         break;
                     }
@@ -370,7 +402,18 @@ module.exports = function makeGmailService(io) {
                 console.log(`[Gmail] Processed transcript for student ${student.name}`);
             } catch (err) {
                 console.error('[Gmail] Error processing email:', err.message);
+                stallReason = stallReason || `error al procesar el correo (${err.message})`;
             }
+        }
+
+        // Emails waiting but none got through: nobody would notice otherwise.
+        if (messages.length > 0 && processed === 0 && skipped < messages.length) {
+            const pending = messages.length - skipped;
+            console.warn(`[Gmail] Stalled: ${pending} pending, 0 processed — ${stallReason || 'motivo desconocido'}`);
+            await alertAdmins(teacher,
+                '⚠️ Transcripciones sin procesar',
+                `${pending} transcripción(es) de ${teacher.name} no se han podido procesar: ${stallReason || 'motivo desconocido'}. Revisa los registros del servicio.`
+            );
         }
 
         // Update last_check:
