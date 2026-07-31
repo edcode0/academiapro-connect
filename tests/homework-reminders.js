@@ -1070,6 +1070,8 @@ async function testGmailFlowRollsBackOnReminderCtaFailure() {
                 state.updates.push({ sql, params });
                 return { rows: [], rowCount: 1 };
             }
+            // Failed batch triggers the stalled-queue admin alert.
+            if (sql.includes("role = 'admin'")) return { rows: [] };
             throw new Error(`Unexpected SQL in gmail rollback test: ${sql}`);
         }
     });

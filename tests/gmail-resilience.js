@@ -27,15 +27,18 @@ const TEACHER = {
     transcript_email: null
 };
 
-function buildEnv({ messages, groqCreate, listThrows }) {
-    const state = { sql: [], groqCalls: 0, gmailGets: 0 };
+function buildEnv({ messages, groqCreate, listThrows, alreadySaved = [] }) {
+    const state = { sql: [], groqCalls: 0, gmailGets: 0, notifications: [] };
 
     const db = {
         isPostgres: true,
         state,
         async query(sql, params = []) {
             state.sql.push({ sql, params });
-            if (sql.includes('SELECT id FROM transcripts WHERE gmail_msg_id')) return { rows: [] };
+            if (sql.includes('SELECT id FROM transcripts WHERE gmail_msg_id')) {
+                return { rows: alreadySaved.includes(params[0]) ? [{ id: 1 }] : [] };
+            }
+            if (sql.includes("role = 'admin'")) return { rows: [{ id: 99 }] };
             if (sql.includes('FROM students s WHERE s.academy_id')) return { rows: [{ id: 12, name: 'Ana', user_id: 55 }] };
             if (sql.includes('SELECT r.id FROM rooms r')) return { rows: [{ id: 91 }] };
             return { rows: [], rowCount: 1 };
@@ -71,7 +74,11 @@ function buildEnv({ messages, groqCreate, listThrows }) {
             createHomeworkReminderFromTranscript: async () => null,
             buildHomeworkReminderPrompt: () => ''
         },
-        '../notifications': { createNotification: async () => {} },
+        '../notifications': {
+            createNotification: async (userId, academyId, type, title, message) => {
+                state.notifications.push({ userId, title, message });
+            }
+        },
         './calendar': { makeOAuth2Client: () => ({ setCredentials() {}, on() {} }) },
         googleapis: { google: { gmail: () => gmailApi } }
     });
@@ -125,6 +132,51 @@ async function testWindowAdvancesWhenBatchCompletes() {
     assert.ok(movedWindow(state), 'a fully drained batch must still advance the window');
 }
 
+async function testStallAlertsAdmin() {
+    const err = Object.assign(new Error('429 rate_limit_exceeded'), { status: 429 });
+    const { state, service } = buildEnv({
+        messages: Array.from({ length: 30 }, (_, i) => ({ id: `msg-${i}` })),
+        groqCreate: () => { throw err; }
+    });
+
+    await service.checkAndProcessTranscripts(TEACHER);
+
+    const alerts = state.notifications.filter(n => n.userId === 99);
+    assert.strictEqual(alerts.length, 1, 'admin must be told the queue is stalled');
+    assert.ok(/límite diario de la IA/.test(alerts[0].message), 'alert must name the actual cause');
+    assert.ok(/30 transcripción/.test(alerts[0].message), 'alert must state how many are stuck');
+}
+
+async function testStallAlertIsThrottledPerDay() {
+    const err = Object.assign(new Error('429 rate_limit_exceeded'), { status: 429 });
+    const { state, service } = buildEnv({
+        messages: [{ id: 'msg-1' }],
+        groqCreate: () => { throw err; }
+    });
+
+    await service.checkAndProcessTranscripts(TEACHER);
+    await service.checkAndProcessTranscripts(TEACHER);
+    await service.checkAndProcessTranscripts(TEACHER);
+
+    assert.strictEqual(
+        state.notifications.filter(n => n.userId === 99).length, 1,
+        'a stalled queue must not notify the admin every 15 minutes'
+    );
+}
+
+async function testAllDuplicatesDoNotAlert() {
+    const { state, service } = buildEnv({
+        messages: [{ id: 'msg-1' }, { id: 'msg-2' }],
+        alreadySaved: ['msg-1', 'msg-2'],
+        groqCreate: okAnalysis
+    });
+
+    const processed = await service.checkAndProcessTranscripts(TEACHER);
+
+    assert.strictEqual(processed, 0);
+    assert.strictEqual(state.notifications.length, 0, 'nothing pending means nothing is wrong');
+}
+
 async function testInvalidGrantClearsTokens() {
     const { state, service } = buildEnv({ messages: [], groqCreate: okAnalysis, listThrows: 'invalid_grant' });
 
@@ -135,6 +187,8 @@ async function testInvalidGrantClearsTokens() {
         state.sql.some(q => q.sql.includes('gmail_access_token=NULL')),
         'revoked token must be cleared so the teacher is prompted to reconnect'
     );
+    assert.ok(state.notifications.some(n => n.userId === TEACHER.id), 'teacher must be asked to reconnect');
+    assert.ok(state.notifications.some(n => n.userId === 99), 'admin must know a teacher feed is down');
 }
 
 (async () => {
@@ -142,6 +196,9 @@ async function testInvalidGrantClearsTokens() {
         testRateLimitAbortsBatch,
         testBatchCapLimitsRun,
         testWindowAdvancesWhenBatchCompletes,
+        testStallAlertsAdmin,
+        testStallAlertIsThrottledPerDay,
+        testAllDuplicatesDoNotAlert,
         testInvalidGrantClearsTokens
     ];
     for (const t of tests) {
