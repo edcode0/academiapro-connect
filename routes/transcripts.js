@@ -227,7 +227,7 @@ ${transcriptForAI}`;
             let apiResponse;
             try {
                 apiResponse = await groqClient.chat.completions.create({
-                    model: "deepseek-chat",
+                    model: "deepseek-v4-flash",
                     messages: [
                         { role: 'system', content: 'Eres un asistente educativo que analiza transcripciones de clases particulares. Tu tarea es extraer la información más útil para el alumno. Responde EXCLUSIVAMENTE con el JSON solicitado.' },
                         { role: 'user', content: prompt }

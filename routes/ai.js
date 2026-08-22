@@ -79,19 +79,14 @@ router.post('/api/ai-tutor/chat', authenticateJWT, async (req, res, next) => {
           [conversationId, 'user', userMessageStr]
         );
 
-        // DeepSeek no soporta contenido con imágenes (Groq sí tenía modelo vision).
+        // Mensajes con imagen necesitan el modelo vision (más caro); el resto usa flash.
         const hasComplexContent = messages.some(m => Array.isArray(m.content));
-        if (hasComplexContent) {
-            return res.status(400).json({
-                error: 'El asistente IA no puede analizar imágenes por ahora. Describe tu duda en texto.',
-                conversationId
-            });
-        }
+        const modelToUse = hasComplexContent ? "deepseek-v4-flash-vision-exp" : "deepseek-v4-flash";
 
         let apiResponse;
         try {
             apiResponse = await groqClient.chat.completions.create({
-                model: "deepseek-chat",
+                model: modelToUse,
                 messages: [{ role: 'system', content: systemPrompt }, ...messages],
                 temperature: 0.7,
                 max_tokens: 1024,
@@ -184,7 +179,7 @@ router.post('/api/exam-simulator/generate', authenticateJWT, requireStudent, asy
         let apiResponse;
         try {
             apiResponse = await groqClient.chat.completions.create({
-                model: "deepseek-chat",
+                model: "deepseek-v4-flash",
                 messages: [
                     { role: 'system', content: 'Eres un generador de exámenes que responde ÚNICA Y EXCLUSIVAMENTE con un JSON válido en español. No añadas texto explicativo, ni Markdown (tampoco \`\`\`json), sólo devuelve las llaves { } del JSON y su contenido. El formato de options para multiple_choice debe ser un array de 4 strings que empiecen con "A) ", "B) ", "C) " y "D) ".' },
                     { role: 'user', content: prompt }
@@ -322,7 +317,7 @@ Responde siempre en español, de forma clara y concisa.`
     let completion;
     try {
       completion = await groqClient.chat.completions.create({
-        model: 'deepseek-chat',
+        model: 'deepseek-v4-flash',
         messages,
         max_tokens: 500,
         temperature: 0.7

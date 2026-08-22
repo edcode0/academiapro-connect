@@ -78,7 +78,7 @@ router.post('/generate-report', authenticateJWT, requireTeacherOrAdmin, async (r
 
         // Generate AI text
         const aiResponse = await groqClient.chat.completions.create({
-            model: 'deepseek-chat',
+            model: 'deepseek-v4-flash',
             messages: [
                 { role: 'system', content: 'Eres el tutor de una academia de repaso española. Genera un informe mensual profesional y cercano para la familia. Tono cálido pero profesional. Estructura: saludo personalizado, resumen positivo del mes, análisis de exámenes, áreas de mejora, próximos objetivos, cierre motivador. Máximo 250 palabras. Siempre en español.' },
                 { role: 'user', content: `Estudiante: ${student.name}, Curso: ${student.course || '-'}, Asignatura: ${student.subject || '-'}. Sesiones este mes: ${sessions.length}. Tareas completadas: ${homeworkRate}%. Notas exámenes: ${examDetails || 'Ninguno'}. Simulacros: ${simDetails || 'Ninguno'}. Observaciones: ${observations || 'Sin observaciones adicionales'}.` }
