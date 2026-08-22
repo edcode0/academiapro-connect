@@ -29,7 +29,7 @@ router.post('/api/exam-simulator/generate', authenticateJWT, requireStudent, asy
         }`;
 
         const apiResponse = await groqClient.chat.completions.create({
-            model: "llama-3.3-70b-versatile",
+            model: "deepseek-chat",
             messages: [
                 { role: 'system', content: 'Eres un generador de exámenes que responde ÚNICA Y EXCLUSIVAMENTE con un JSON válido en español. No añadas texto explicativo, ni Markdown (tampoco ```json), sólo devuelve las llaves { } del JSON y su contenido. El formato de options para multiple_choice debe ser un array de 4 strings que empiecen con "A) ", "B) ", "C) " y "D) ".' },
                 { role: 'user', content: prompt }

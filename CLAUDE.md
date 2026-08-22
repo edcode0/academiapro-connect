@@ -64,7 +64,7 @@ El objetivo: que la próxima sesión arranque con contexto preciso sin explorar 
 
 **AcademiaPro** — SaaS para academias de repaso. Multi-tenant (academy_id en todas las queries).
 
-**Stack:** Node.js + Express 5 · PostgreSQL (Railway) / SQLite (local) · Socket.io · Groq (llama-3.3-70b) · Google OAuth + Calendar + Gmail · Resend email · Sentry · JWT + bcrypt
+**Stack:** Node.js + Express 5 · PostgreSQL (Railway) / SQLite (local) · Socket.io · DeepSeek (deepseek-chat, vía SDK `openai` con baseURL propio) · Google OAuth + Calendar + Gmail · Resend email · Sentry · JWT + bcrypt
 
 **Deploy:** `git push origin main` → Railway auto-deploy (~2 min). No hay staging.
 **Dominio:** academiapro.academy · **Repo:** github.com/edcode0/academiapro
@@ -87,7 +87,7 @@ index.js         → 473 líneas: setup, middleware global, montar routers, inte
 
 **Roles:** admin · teacher · student. Siempre verificar `req.user.role` y `req.user.academy_id`.
 
-**Groq en producción:** si falla, devolver 503 con mensaje amigable al usuario (no exponer e.message).
+**DeepSeek en producción:** si falla, devolver 503 con mensaje amigable al usuario (no exponer e.message).
 
 **DB:** columnas nuevas siempre via migración en db.js con `IF NOT EXISTS` dentro de `try/catch`.
 

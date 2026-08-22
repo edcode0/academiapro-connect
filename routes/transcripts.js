@@ -193,7 +193,7 @@ ${transcriptForAI}`;
             let apiResponse;
             try {
                 apiResponse = await groqClient.chat.completions.create({
-                    model: "llama-3.3-70b-versatile",
+                    model: "deepseek-chat",
                     messages: [
                         { role: 'system', content: 'Eres un asistente educativo que analiza transcripciones de clases particulares. Tu tarea es extraer la información más útil para el alumno. Responde EXCLUSIVAMENTE con el JSON solicitado.' },
                         { role: 'user', content: prompt }
@@ -203,8 +203,8 @@ ${transcriptForAI}`;
                     response_format: { type: "json_object" }
                 });
             } catch (e) {
-                console.error('Groq API error:', e.message, e.status, e.error);
-                return res.status(500).json({ error: 'Error al contactar la IA: ' + e.message });
+                console.error('DeepSeek API error:', e.message, e.status, e.error);
+                return res.status(503).json({ error: 'El asistente IA no está disponible en este momento. Por favor, inténtalo de nuevo en unos minutos.' });
             }
 
             let jsonContent;

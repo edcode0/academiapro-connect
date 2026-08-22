@@ -1,7 +1,11 @@
 'use strict';
 
-const Groq = require('groq-sdk');
+// Nombre de fichero heredado de Groq — cliente real es DeepSeek (API compatible OpenAI).
+const OpenAI = require('openai');
 
-const groqClient = new Groq({ apiKey: process.env.GROQ_API_KEY || 'dummy' });
+const deepseekClient = new OpenAI({
+    apiKey: process.env.DEEPSEEK_API_KEY || 'dummy',
+    baseURL: 'https://api.deepseek.com'
+});
 
-module.exports = groqClient;
+module.exports = deepseekClient;

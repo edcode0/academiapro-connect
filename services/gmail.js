@@ -12,7 +12,7 @@ const { makeOAuth2Client }   = require('./calendar');
 
 const isPostgres = !!process.env.DATABASE_URL;
 
-// Bound Groq token burn per run: a backlog of N emails must not be re-analyzed
+// Bound DeepSeek token burn per run: a backlog of N emails must not be re-analyzed
 // in full on every 15-min tick (that exhausts the daily token quota in minutes).
 // Processed emails become duplicates next run, so the backlog drains monotonically.
 const MAX_PER_RUN = 5;
@@ -201,12 +201,12 @@ module.exports = function makeGmailService(io) {
                 const students = studentsResult.rows || [];
                 if (!students.length) continue;
 
-                // Analyze with Groq
+                // Analyze with DeepSeek
                 const studentNames = students.map(s => s.name).join(', ');
                 let analysis;
                 try {
                     analysis = await groqClient.chat.completions.create({
-                        model:    'llama-3.3-70b-versatile',
+                        model:    'deepseek-chat',
                         messages: [{
                             role:    'user',
                             content: `Analiza esta transcripción de clase y genera un resumen estructurado.\n\nAlumnos posibles: ${studentNames}\n\nTranscripción:\n${body.substring(0, 8000)}\n\nResponde SOLO en JSON con este formato exacto:\n{\n  "student_name": "nombre del alumno identificado o más probable",\n  "resumen": "Resumen de lo tratado en clase en 2-3 frases",\n  "conceptos_clave": ["concepto 1", "concepto 2"],\n  "deberes": ["tarea 1", "tarea 2"],\n  "pistas_profesor": ["consejo o observación del profesor 1"],\n  "proximos_pasos": ["próximo tema 1"],\n  "mensaje_motivador": "Mensaje corto de ánimo para el alumno"\n}`
@@ -220,8 +220,8 @@ module.exports = function makeGmailService(io) {
                     // Abort the run instead of burning one doomed call per email.
                     if (isRateLimit(e)) {
                         stoppedEarly = true;
-                        stallReason = 'se ha alcanzado el límite diario de la IA (Groq)';
-                        console.warn('[Gmail] Groq rate limit — batch aborted, retry next run:', e.message);
+                        stallReason = 'se ha alcanzado el límite diario de la IA (DeepSeek)';
+                        console.warn('[Gmail] DeepSeek rate limit — batch aborted, retry next run:', e.message);
                         break;
                     }
                     throw e;

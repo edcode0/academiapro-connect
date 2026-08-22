@@ -79,20 +79,25 @@ router.post('/api/ai-tutor/chat', authenticateJWT, async (req, res, next) => {
           [conversationId, 'user', userMessageStr]
         );
 
-        // Check if any message contains a doc/image object (like PDF base64).
+        // DeepSeek no soporta contenido con imágenes (Groq sí tenía modelo vision).
         const hasComplexContent = messages.some(m => Array.isArray(m.content));
-        const modelToUse = hasComplexContent ? "llama-3.2-11b-vision-preview" : "llama-3.3-70b-versatile";
+        if (hasComplexContent) {
+            return res.status(400).json({
+                error: 'El asistente IA no puede analizar imágenes por ahora. Describe tu duda en texto.',
+                conversationId
+            });
+        }
 
         let apiResponse;
         try {
             apiResponse = await groqClient.chat.completions.create({
-                model: modelToUse,
+                model: "deepseek-chat",
                 messages: [{ role: 'system', content: systemPrompt }, ...messages],
                 temperature: 0.7,
                 max_tokens: 1024,
             });
         } catch (groqErr) {
-            console.error('[ai-tutor/chat] Groq error:', groqErr.message);
+            console.error('[ai-tutor/chat] DeepSeek error:', groqErr.message);
             return res.status(503).json({
                 error: 'El asistente IA no está disponible en este momento. Por favor, inténtalo de nuevo en unos minutos.',
                 conversationId
@@ -179,7 +184,7 @@ router.post('/api/exam-simulator/generate', authenticateJWT, requireStudent, asy
         let apiResponse;
         try {
             apiResponse = await groqClient.chat.completions.create({
-                model: "llama-3.3-70b-versatile",
+                model: "deepseek-chat",
                 messages: [
                     { role: 'system', content: 'Eres un generador de exámenes que responde ÚNICA Y EXCLUSIVAMENTE con un JSON válido en español. No añadas texto explicativo, ni Markdown (tampoco \`\`\`json), sólo devuelve las llaves { } del JSON y su contenido. El formato de options para multiple_choice debe ser un array de 4 strings que empiecen con "A) ", "B) ", "C) " y "D) ".' },
                     { role: 'user', content: prompt }
@@ -188,7 +193,7 @@ router.post('/api/exam-simulator/generate', authenticateJWT, requireStudent, asy
                 response_format: { type: "json_object" }
             });
         } catch (groqErr) {
-            console.error('[exam-simulator] Groq error:', groqErr.message);
+            console.error('[exam-simulator] DeepSeek error:', groqErr.message);
             return res.status(503).json({ error: 'El generador de exámenes no está disponible ahora mismo. Inténtalo de nuevo en unos minutos.' });
         }
 
@@ -317,13 +322,13 @@ Responde siempre en español, de forma clara y concisa.`
     let completion;
     try {
       completion = await groqClient.chat.completions.create({
-        model: 'llama-3.3-70b-versatile',
+        model: 'deepseek-chat',
         messages,
         max_tokens: 500,
         temperature: 0.7
       });
     } catch (groqErr) {
-      console.error('Help assistant Groq error:', groqErr.message);
+      console.error('Help assistant DeepSeek error:', groqErr.message);
       return res.json({ response: 'El asistente no está disponible en este momento. Consulta la documentación o inténtalo de nuevo en unos minutos.' });
     }
 
