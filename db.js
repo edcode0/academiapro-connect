@@ -751,7 +751,17 @@ async function initDb() {
     // recurring_sessions
     'CREATE INDEX IF NOT EXISTS idx_recurring_sessions_academy_id ON recurring_sessions(academy_id)',
     'CREATE INDEX IF NOT EXISTS idx_recurring_sessions_teacher_id ON recurring_sessions(teacher_id)',
-    'CREATE INDEX IF NOT EXISTS idx_recurring_sessions_active ON recurring_sessions(active)'
+    'CREATE INDEX IF NOT EXISTS idx_recurring_sessions_active ON recurring_sessions(active)',
+
+    // simulator_results — listado por alumno (exams.js, reports.js)
+    'CREATE INDEX IF NOT EXISTS idx_simulator_results_student_id ON simulator_results(student_id)',
+
+    // teacher_payments — consulta habitual por profesor+academia
+    'CREATE INDEX IF NOT EXISTS idx_teacher_payments_teacher_academy ON teacher_payments(teacher_id, academy_id)',
+
+    // homework_reminders — join por alumno + escaneo del cron de recordatorios pendientes
+    'CREATE INDEX IF NOT EXISTS idx_homework_reminders_student_id ON homework_reminders(student_id)',
+    'CREATE INDEX IF NOT EXISTS idx_homework_reminders_due ON homework_reminders(status, scheduled_for)'
   ];
   for (const sql of indexMigrations) {
     try { await db.query(sql); } catch (e) { /* index may already exist */ }

@@ -259,33 +259,34 @@ router.get('/api/teacher/students', authenticateJWT, requireTeacherOrAdmin, (req
         });
 });
 
-router.get('/api/teacher/dashboard-stats', authenticateJWT, requireTeacherOrAdmin, (req, res, next) => {
-    const teacherId = req.user.id;
-    const academyId = req.user.academy_id;
-    const now = new Date();
-    const currentMonth = now.toISOString().slice(0, 7);
+router.get('/api/teacher/dashboard-stats', authenticateJWT, requireTeacherOrAdmin, async (req, res, next) => {
+    try {
+        const teacherId = req.user.id;
+        const academyId = req.user.academy_id;
+        const currentMonth = new Date().toISOString().slice(0, 7);
 
-    const stats = {};
-    db.query('SELECT COUNT(*) as count FROM students WHERE assigned_teacher_id = $1 AND academy_id = $2', [teacherId, academyId], (err, result1) => {
-        stats.studentCount = result1?.rows[0]?.count || 0;
-        db.query('SELECT COUNT(*) as count FROM sessions s JOIN students st ON s.student_id = st.id WHERE st.assigned_teacher_id = $1 AND st.academy_id = $2 AND s.date LIKE $3', [teacherId, academyId, `${currentMonth}%`], (err, result2) => {
-            stats.sessionCount = result2?.rows[0]?.count || 0;
-            db.query("SELECT COUNT(*) as count FROM students WHERE assigned_teacher_id = $1 AND academy_id = $2 AND status = 'at_risk'", [teacherId, academyId], (err, result3) => {
-                stats.atRiskCount = result3?.rows[0]?.count || 0;
-                db.query('SELECT AVG(score) as avg FROM exams e JOIN students st ON e.student_id = st.id WHERE st.assigned_teacher_id = $1 AND st.academy_id = $2', [teacherId, academyId], (err, result4) => {
-                    stats.avgScore = result4?.rows[0]?.avg ? parseFloat(result4.rows[0].avg).toFixed(1) : 0;
+        // Independent queries, all scoped by teacherId+academyId — run in parallel
+        const [studentCountR, sessionCountR, atRiskCountR, avgScoreR, recentActivityR] = await Promise.all([
+            db.query('SELECT COUNT(*) as count FROM students WHERE assigned_teacher_id = $1 AND academy_id = $2', [teacherId, academyId]),
+            db.query('SELECT COUNT(*) as count FROM sessions s JOIN students st ON s.student_id = st.id WHERE st.assigned_teacher_id = $1 AND st.academy_id = $2 AND s.date LIKE $3', [teacherId, academyId, `${currentMonth}%`]),
+            db.query("SELECT COUNT(*) as count FROM students WHERE assigned_teacher_id = $1 AND academy_id = $2 AND status = 'at_risk'", [teacherId, academyId]),
+            db.query('SELECT AVG(score) as avg FROM exams e JOIN students st ON e.student_id = st.id WHERE st.assigned_teacher_id = $1 AND st.academy_id = $2', [teacherId, academyId]),
+            db.query(`SELECT s.*, st.name as student_name FROM sessions s
+                    JOIN students st ON s.student_id = st.id
+                    WHERE st.assigned_teacher_id = $1 AND st.academy_id = $2
+                    ORDER BY s.date DESC LIMIT 5`, [teacherId, academyId])
+        ]);
 
-                    db.query(`SELECT s.*, st.name as student_name FROM sessions s
-                            JOIN students st ON s.student_id = st.id
-                            WHERE st.assigned_teacher_id = $1 AND st.academy_id = $2
-                            ORDER BY s.date DESC LIMIT 5`, [teacherId, academyId], (err, result5) => {
-                        stats.recentActivity = result5?.rows || [];
-                        res.json(stats);
-                    });
-                });
-            });
+        res.json({
+            studentCount: studentCountR.rows[0]?.count || 0,
+            sessionCount: sessionCountR.rows[0]?.count || 0,
+            atRiskCount: atRiskCountR.rows[0]?.count || 0,
+            avgScore: avgScoreR.rows[0]?.avg ? parseFloat(avgScoreR.rows[0].avg).toFixed(1) : 0,
+            recentActivity: recentActivityR.rows || []
         });
-    });
+    } catch (err) {
+        next(err);
+    }
 });
 
 module.exports = router;

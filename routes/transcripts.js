@@ -21,6 +21,40 @@ const { createNotification } = require('../notifications');
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
+// Resolve a student's USER id from whatever identifier the caller passed in:
+// it may already be a users.id, a students.id linked to a user, or (legacy data)
+// a students.id whose link is missing and has to be recovered by name match.
+async function resolveStudentUserId(studentId, academyId) {
+    const directUser = await db.query(
+        "SELECT id FROM users WHERE id = $1 AND role = 'student' AND academy_id = $2",
+        [studentId, academyId]
+    );
+    const duRows = directUser.rows || directUser;
+    if (duRows?.length > 0) return duRows[0].id;
+
+    const linkedUser = await db.query(
+        "SELECT user_id FROM students WHERE id = $1 AND academy_id = $2 AND user_id IS NOT NULL",
+        [studentId, academyId]
+    );
+    const luRows = linkedUser.rows || linkedUser;
+    if (luRows?.length > 0) return luRows[0].user_id;
+
+    const studentRecord = await db.query("SELECT name FROM students WHERE id = $1", [studentId]);
+    const srRows = studentRecord.rows || studentRecord;
+    if (!srRows?.length) return null;
+
+    const nameMatch = await db.query(
+        "SELECT id FROM users WHERE academy_id = $1 AND role = 'student' AND LOWER(name) = LOWER($2) LIMIT 1",
+        [academyId, srRows[0].name]
+    );
+    const nmRows = nameMatch.rows || nameMatch;
+    if (!nmRows?.length) return null;
+
+    // Fix the link for future lookups
+    await db.query("UPDATE students SET user_id = $1 WHERE id = $2", [nmRows[0].id, studentId]);
+    return nmRows[0].id;
+}
+
 // Factory: receives io instance so it can emit socket events
 module.exports = function makeTranscriptsRouter(io) {
     const gmailService = require('../services/gmail')(io);
@@ -236,56 +270,8 @@ ${transcriptForAI}`;
             }
 
             // Step 1: Resolve student USER id
-            let studentUserId = null;
+            const studentUserId = await resolveStudentUserId(student_id, academy_id);
             let normalizedStudentId = null;
-
-            // Try: maybe student_id is already a user id
-            const directUser = await db.query(
-                "SELECT id FROM users WHERE id = $1 AND role = 'student' AND academy_id = $2",
-                [student_id, academy_id]
-            );
-            const duRows = directUser.rows || directUser;
-            if (duRows && duRows.length > 0) {
-                studentUserId = duRows[0].id;
-            }
-
-            // If not found, try: student_id is students.id, find linked user
-            if (!studentUserId) {
-                const linkedUser = await db.query(
-                    "SELECT id, user_id FROM students WHERE id = $1 AND academy_id = $2 AND user_id IS NOT NULL",
-                    [student_id, academy_id]
-                );
-                const luRows = linkedUser.rows || linkedUser;
-                if (luRows && luRows.length > 0) {
-                    normalizedStudentId = luRows[0].id;
-                    studentUserId = luRows[0].user_id;
-                }
-            }
-
-            // If still not found, try matching by name
-            if (!studentUserId) {
-                const studentRecord = await db.query(
-                    "SELECT name FROM students WHERE id = $1",
-                    [student_id]
-                );
-                const srRows = studentRecord.rows || studentRecord;
-                if (srRows && srRows.length > 0) {
-                    const nameMatch = await db.query(
-                        "SELECT id FROM users WHERE academy_id = $1 AND role = 'student' AND LOWER(name) = LOWER($2) LIMIT 1",
-                        [academy_id, srRows[0].name]
-                    );
-                    const nmRows = nameMatch.rows || nameMatch;
-                    if (nmRows && nmRows.length > 0) {
-                        studentUserId = nmRows[0].id;
-                        // Fix the link for future use
-                        await db.query(
-                            "UPDATE students SET user_id = $1 WHERE id = $2",
-                            [studentUserId, student_id]
-                        );
-                        normalizedStudentId = Number(student_id);
-                    }
-                }
-            }
 
             if (!studentUserId) {
                 return res.status(404).json({

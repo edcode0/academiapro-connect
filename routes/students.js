@@ -141,35 +141,37 @@ router.put('/api/students/:id', authenticateJWT, requireAdmin, (req, res, next) 
     });
 });
 
-router.get('/api/student-detail/:id', authenticateJWT, (req, res, next) => {
-    const id = req.params.id;
-    const result = {};
+router.get('/api/student-detail/:id', authenticateJWT, async (req, res, next) => {
+    try {
+        const id = req.params.id;
 
-    db.query(`
-        SELECT s.*, u.name as teacher_name
-        FROM students s
-        LEFT JOIN users u ON s.assigned_teacher_id = u.id
-        WHERE s.id = $1 AND s.academy_id = $2
-    `, [id, req.user.academy_id], (err, resData) => {
-        if (err) return next(err);
-        const student = resData?.rows[0];
+        const studentResult = await db.query(`
+            SELECT s.*, u.name as teacher_name
+            FROM students s
+            LEFT JOIN users u ON s.assigned_teacher_id = u.id
+            WHERE s.id = $1 AND s.academy_id = $2
+        `, [id, req.user.academy_id]);
+        const student = studentResult.rows?.[0];
         if (!student) return res.status(404).json({ error: 'Student not found' });
-        result.student = student;
 
-        db.query(`SELECT * FROM sessions WHERE student_id = $1 ORDER BY date DESC`, [id], (err, resSessions) => {
-            result.sessions = resSessions?.rows || [];
-            db.query(`SELECT * FROM exams WHERE student_id = $1 ORDER BY date DESC`, [id], (err, resExams) => {
-                result.exams = resExams?.rows || [];
-                db.query(`SELECT * FROM payments WHERE student_id = $1 ORDER BY due_date DESC`, [id], (err, resPayments) => {
-                    result.payments = resPayments?.rows || [];
-                    db.query(`SELECT id, label, url, created_at FROM student_links WHERE student_id = $1 AND academy_id = $2 ORDER BY created_at DESC`, [id, req.user.academy_id], (err, resLinks) => {
-                        result.links = resLinks?.rows || [];
-                        res.json(result);
-                    });
-                });
-            });
+        // Independent queries, keyed only by student id — run in parallel instead of nested callbacks
+        const [sessions, exams, payments, links] = await Promise.all([
+            db.query(`SELECT * FROM sessions WHERE student_id = $1 ORDER BY date DESC`, [id]),
+            db.query(`SELECT * FROM exams WHERE student_id = $1 ORDER BY date DESC`, [id]),
+            db.query(`SELECT * FROM payments WHERE student_id = $1 ORDER BY due_date DESC`, [id]),
+            db.query(`SELECT id, label, url, created_at FROM student_links WHERE student_id = $1 AND academy_id = $2 ORDER BY created_at DESC`, [id, req.user.academy_id])
+        ]);
+
+        res.json({
+            student,
+            sessions: sessions.rows || [],
+            exams: exams.rows || [],
+            payments: payments.rows || [],
+            links: links.rows || []
         });
-    });
+    } catch (err) {
+        next(err);
+    }
 });
 
 // ── Student Links CRUD ────────────────────────────────────────────────────────
