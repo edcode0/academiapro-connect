@@ -25,17 +25,17 @@ Verif: boot OK, health 200, socket handshake 200 desde origen permitido.
 - [x] **D2** Fuente de NULL en `session_type`: insert de sesión al reservar slot ahora pasa `'individual'`. `OR IS NULL` defensivo se mantiene (maneja filas viejas; reescribir queries = churn sin bug → YAGNI).
 Verif: boot OK. Sin migración destructiva (tolera datos existentes).
 
-## FASE 4 — Rendimiento  [1 commit]
-- [ ] **P1** Índices: confirmar/crear en `db.js` initDb para `academy_id`, `student_id`, `assigned_teacher_id`, `room_id`, `user_id`, `messages.room_id`, `available_slots.start_datetime`.
-- [ ] **P2** N+1: `teacher/dashboard-stats` y `student-detail` → colapsar queries anidadas con `Promise.all`.
+## FASE 4 — Rendimiento  ✅ COMPLETO 2026-08-22
+- [x] **P1** Índices confirmados/creados en `db.js` initDb: la lista original (`academy_id`, `student_id`, `assigned_teacher_id`, `room_id`, `user_id`, `messages.room_id`, `available_slots.start_datetime`) ya estaba cubierta de una sesión anterior sin marcar. Añadidos los que faltaban de verdad: `simulator_results.student_id`, `teacher_payments(teacher_id, academy_id)`, `homework_reminders.student_id` y `(status, scheduled_for)` para el cron de recordatorios.
+- [x] **P2** N+1 colapsado con `Promise.all`: `/api/teacher/dashboard-stats` (5 queries) y `/api/student-detail/:id` (4 queries), antes anidadas en callback.
 - [ ] **P3** `payments-data`/`exams-data`: agregados en JS OK por ahora (ponytail: dejar salvo academia con >1000 filas). Marcar con comentario, no tocar.
-Verif: EXPLAIN usa índices; dashboards devuelven mismos datos.
+Verif: boot local + Railway OK, 70/70 smoke, socket-authz OK, 7/7 gmail-resilience.
 
-## FASE 5 — Arquitectura / mantenibilidad  [1-2 commits]
+## FASE 5 — Arquitectura / mantenibilidad  ✅ COMPLETO 2026-08-22
 - [x] **A1** ✅ Helper `db.insertReturning(text, params)` en db.js. Migrados 15 sitios: auth(8), calendar(2), ai(1), transcripts(1), recurring(1), rooms(2). Dejados: inserts en `withTransaction`/`dbRunner`/`RETURNING *`. Verif: register real + login 200 en SQLite.
-- [ ] **A2** Unificar `authenticateJWT`: borrar copia inline `index.js:219`, usar la de `middleware/auth.js` en todo (páginas incluidas).
-- [ ] **A3** Extraer `resolveStudentUserId()` del triple-fallback de transcripts send-to-chat.
-Verif: smoke completo tras cada migración; sin cambio de comportamiento.
+- [x] **A2** ✅ Unificada `authenticateJWT`: borrada la copia inline de `index.js`, ahora usa `middleware/auth.js` en todo (páginas incluidas). De propina, las páginas ganan renovación deslizante de cookie.
+- [x] **A3** ✅ Extraída `resolveStudentUserId()` del triple-fallback de transcripts send-to-chat. De paso se eliminó el `normalizedStudentId` muerto que fijaban los pasos 2 y 3 (siempre se sobreescribía después del scopeCheck).
+Verif: 70/70 smoke, socket-authz OK, 7/7 gmail-resilience, deploy Railway OK.
 
 ## FASE 6 — Frontend  ✅ COMPLETO (F1-F5)
 - [x] **F1** `design-system.css` borrado (0 páginas lo cargaban).
@@ -47,9 +47,9 @@ Verif: smoke completo tras cada migración; sin cambio de comportamiento.
 ## VOLUMEN RAILWAY ✅ COMPLETO 2026-07-02
 - [x] `web-volume` (5GB) montado en `/app/public/uploads` del servicio web. Confirmado por SSH: dispositivo montado + escribible. Adjuntos chat + PDFs informes ya persisten entre deploys. README actualizado.
 
-## FASE 7 — Producto / features  [PENDIENTE — checkpoint con usuario]
-- [ ] **PR1** `payments/auto-generate` → correr en cron mensual (`cron.js` ya tiene `isFirstOfMonth`). Cambia comportamiento de producto → confirmar.
-- [ ] **PR2** Job diario recalcula riesgo por inactividad. Extiende `checkStudentRisk`. Confirmar umbral de inactividad.
+## FASE 7 — Producto / features  ✅ YA COMPLETO (encontrado 2026-08-22, sin marcar)
+- [x] **PR1** `generateMonthlyPayments()` (`services/billing.js`) corre en `cron.js` cada día 1 del mes, idempotente. Wired en `runDailyJobs`. Commit `210f571`.
+- [x] **PR2** `checkInactivityRisk()` (`services/risk.js`) corre a diario, umbral 14 días sin sesión (`ponytail:` comentado, ajustable). Wired en `runDailyJobs`. Commit `210f571`.
 - [x] **PR3** `email.js` fallback BASE_URL → `academiapro.academy` (ambos sitios).
 
 ## FASE 8 — Higiene repo  ✅ COMPLETO 2026-07-02
@@ -66,8 +66,8 @@ Causa raíz (logs Railway `web`): bucle de reproceso agota los 100k tokens/día 
 - [x] **T3** No mover `gmail_last_check` si el lote se cortó (Gmail es newest-first: avanzar perdería los antiguos).
 - [x] **T4** `invalid_grant` → limpiar tokens + notificar al profesor (profes 1 y 9 llevaban días caídos en silencio).
 - [x] **T5** `tests/gmail-resilience.js` (4 casos) + wired en `npm test`.
-- [ ] **T6** DECISIÓN USUARIO: subir Groq a Dev Tier. 100k TPD es poco margen aunque el bucle esté arreglado (comparte cuota con el tutor IA).
-- [ ] **T7** Tras deploy: verificar drenaje del backlog de 32 (5 por tick, ~2h) y avisar a profes 1 y 9 de reconectar Gmail.
+- [x] **T6** OBSOLETO: Groq quedó bloqueando con 403 "Access denied" desde 2026-08-20 (no era cuota, algo distinto — org/región). Migrado el proveedor de IA entero a DeepSeek (`deepseek-chat` vía SDK `openai`) 2026-08-22. Ya no aplica subir tier de Groq.
+- [ ] **T7** Tras el deploy de DeepSeek (2026-08-22 10:32 UTC): verificar que la cola de transcripciones atascada (3 pending del incidente Groq) drenó en los ticks siguientes, y avisar a profes 1 y 9 de reconectar Gmail si siguen con `invalid_grant`.
 Verif: 65/65 smoke · homework-reminders OK · 4/4 gmail-resilience.
 
 ---
