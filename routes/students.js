@@ -180,10 +180,14 @@ router.get('/api/student-detail/:id', authenticateJWT, async (req, res, next) =>
 async function verifyStudentAccess(studentId, user) {
     const q = user.role === 'teacher'
         ? 'SELECT id FROM students WHERE id = $1 AND academy_id = $2 AND assigned_teacher_id = $3'
-        : 'SELECT id FROM students WHERE id = $1 AND academy_id = $2';
+        : user.role === 'student'
+            ? 'SELECT id FROM students WHERE id = $1 AND academy_id = $2 AND user_id = $3'
+            : 'SELECT id FROM students WHERE id = $1 AND academy_id = $2';
     const params = user.role === 'teacher'
         ? [studentId, user.academy_id, user.id]
-        : [studentId, user.academy_id];
+        : user.role === 'student'
+            ? [studentId, user.academy_id, user.id]
+            : [studentId, user.academy_id];
     const r = await db.query(q, params);
     return (r?.rows?.length > 0);
 }
@@ -224,6 +228,68 @@ router.delete('/api/students/:id/links/:linkId', authenticateJWT, async (req, re
             [req.params.linkId, req.params.id, req.user.academy_id]
         );
         if (r.rowCount === 0) return res.status(404).json({ error: 'Enlace no encontrado' });
+        res.json({ success: true });
+    } catch (e) { next(e); }
+});
+
+router.get('/api/students/:id/goals', authenticateJWT, async (req, res, next) => {
+    try {
+        const ok = await verifyStudentAccess(req.params.id, req.user);
+        if (!ok) return res.status(403).json({ error: 'Forbidden' });
+        const r = await db.query(
+            `SELECT g.id, g.text, g.target_date, g.status, g.created_by, g.created_at,
+                    u.name AS created_by_name
+             FROM student_goals g
+             LEFT JOIN users u ON g.created_by = u.id
+             WHERE g.student_id = $1 AND g.academy_id = $2
+             ORDER BY g.target_date IS NULL ASC, g.target_date ASC, g.created_at DESC`,
+            [req.params.id, req.user.academy_id]
+        );
+        res.json(r.rows || []);
+    } catch (e) { next(e); }
+});
+
+router.post('/api/students/:id/goals', authenticateJWT, async (req, res, next) => {
+    try {
+        const ok = await verifyStudentAccess(req.params.id, req.user);
+        if (!ok) return res.status(403).json({ error: 'Forbidden' });
+        const { text, target_date } = req.body;
+        if (!text?.trim()) return res.status(400).json({ error: 'El objetivo es obligatorio' });
+        const targetDate = typeof target_date === 'string' && target_date.trim() ? target_date.trim() : null;
+        const r = await db.query(
+            'INSERT INTO student_goals (student_id, academy_id, created_by, text, target_date) VALUES ($1, $2, $3, $4, $5)',
+            [req.params.id, req.user.academy_id, req.user.id, text.trim(), targetDate]
+        );
+        res.json({ success: true, id: r.rows?.[0]?.id ?? r.lastID });
+    } catch (e) { next(e); }
+});
+
+router.patch('/api/students/:id/goals/:goalId', authenticateJWT, async (req, res, next) => {
+    try {
+        const ok = await verifyStudentAccess(req.params.id, req.user);
+        if (!ok) return res.status(403).json({ error: 'Forbidden' });
+        const { status } = req.body;
+        if (!['active', 'completed'].includes(status)) {
+            return res.status(400).json({ error: 'El estado debe ser active o completed' });
+        }
+        const r = await db.query(
+            'UPDATE student_goals SET status = $1 WHERE id = $2 AND student_id = $3 AND academy_id = $4',
+            [status, req.params.goalId, req.params.id, req.user.academy_id]
+        );
+        if (r.rowCount === 0) return res.status(404).json({ error: 'Objetivo no encontrado' });
+        res.json({ success: true });
+    } catch (e) { next(e); }
+});
+
+router.delete('/api/students/:id/goals/:goalId', authenticateJWT, async (req, res, next) => {
+    try {
+        const ok = await verifyStudentAccess(req.params.id, req.user);
+        if (!ok) return res.status(403).json({ error: 'Forbidden' });
+        const r = await db.query(
+            'DELETE FROM student_goals WHERE id = $1 AND student_id = $2 AND academy_id = $3',
+            [req.params.goalId, req.params.id, req.user.academy_id]
+        );
+        if (r.rowCount === 0) return res.status(404).json({ error: 'Objetivo no encontrado' });
         res.json({ success: true });
     } catch (e) { next(e); }
 });

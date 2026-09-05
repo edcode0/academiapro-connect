@@ -507,6 +507,11 @@
             </div>
         </div>
 
+        <div class="card" style="margin-top: 1.5rem; display:none;" id="goals-card">
+            <h4>🎯 Mis objetivos</h4>
+            <div id="student-goals-list" style="margin-top: 1rem;"></div>
+        </div>
+
         <div class="danger-zone"
             style="margin-top: 2rem; border: 1px solid #fee2e2; border-radius: 12px; padding: 1.5rem; background: #fff5f5;">
             <h3 style="color: #dc2626; margin-bottom: 0.5rem;">⚠️ Zona de peligro</h3>
@@ -834,6 +839,22 @@
                             </a>
                         </div>
                     `).join('');
+                }
+
+                const goalsRes = await fetch(`/api/students/${student.id}/goals`, { credentials: 'include' });
+                if (goalsRes.ok) {
+                    const goals = (await goalsRes.json()).filter(g => g.status === 'active');
+                    if (goals.length) {
+                        document.getElementById('goals-card').style.display = '';
+                        document.getElementById('student-goals-list').innerHTML = goals.map(g => `
+                            <div style="padding:0.6rem 0; border-bottom:1px solid #e2e8f0;">
+                                <div style="font-weight:600;">${escapeHtml(g.text)}</div>
+                                <div style="font-size:0.8rem; color:#64748b; margin-top:0.25rem;">
+                                    ${g.target_date ? `Fecha objetivo: ${new Date(g.target_date + 'T12:00:00').toLocaleDateString('es-ES')}` : 'Sin fecha objetivo'}
+                                </div>
+                            </div>
+                        `).join('');
+                    }
                 }
 
                 // Get user code
