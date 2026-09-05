@@ -4,61 +4,108 @@
 // active link from location.pathname. IDs (userName / teacher-name / sidebar-name
 // and the code spans) are preserved so each page's existing fill logic still works.
 (function () {
-    const LOGOUT_SVG = '<svg viewBox="0 0 512 512"><path d="M377.9 105.9L500.7 228.7c7.2 7.2 11.3 17.1 11.3 27.3s-4.1 20.1-11.3 27.3L377.9 406.1c-6.4 6.4-15 9.9-24 9.9c-18.7 0-33.9-15.2-33.9-33.9l0-62.1-128 0c-17.7 0-32-14.3-32-32l0-64c0-17.7 14.3-32 32-32l128 0 0-62.1c0-18.7 15.2-33.9 33.9-33.9c9 0 17.6 3.6 24 9.9zM160 96L96 96c-17.7 0-32 14.3-32 32l0 256c0 17.7 14.3 32 32 32l64 0c17.7 0 32 14.3 32 32s-14.3 32-32 32l-64 0c-53 0-96-43-96-96L0 128C0 75 43 32 96 32l64 0c17.7 0 32 14.3 32 32s-14.3 32-32 32z"></path></svg>';
+    const ICON_PATHS = {
+        home: '<path d="M3 9.5 12 3l9 6.5"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9"/><path d="M9.5 20v-6h5v6"/>',
+        users: '<path d="M16 19v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 17.5V19"/><circle cx="10" cy="8" r="3.2"/><path d="M19.5 19v-1.5a3.5 3.5 0 0 0-2.6-3.38"/><path d="M15.5 5.2a3.2 3.2 0 0 1 0 5.6"/>',
+        cap: '<path d="M3 9.2 12 5l9 4.2-9 4.2-9-4.2Z"/><path d="M6.5 11v4c0 1.3 2.5 2.6 5.5 2.6s5.5-1.3 5.5-2.6v-4"/><path d="M21 9.2v4.6"/>',
+        card: '<rect x="3" y="5.5" width="18" height="13" rx="2.5"/><path d="M3 9.5h18"/><path d="M6.5 14.5h3"/>',
+        chat: '<path d="M20 14.5a2 2 0 0 1-2 2H8l-4 3.5V6.5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2Z"/><path d="M8.5 9.5h7"/><path d="M8.5 12.5h4"/>',
+        settings: '<circle cx="12" cy="12" r="3"/><path d="M12.2 2.5h-.4a1.8 1.8 0 0 0-1.8 1.8v.16a1.8 1.8 0 0 1-.9 1.56l-.4.23a1.8 1.8 0 0 1-1.8 0l-.13-.08a1.8 1.8 0 0 0-2.46.66l-.2.34a1.8 1.8 0 0 0 .66 2.46l.13.08a1.8 1.8 0 0 1 .9 1.56v.46a1.8 1.8 0 0 1-.9 1.57l-.13.08a1.8 1.8 0 0 0-.66 2.46l.2.34a1.8 1.8 0 0 0 2.46.66l.13-.08a1.8 1.8 0 0 1 1.8 0l.4.23a1.8 1.8 0 0 1 .9 1.56v.16a1.8 1.8 0 0 0 1.8 1.8h.4a1.8 1.8 0 0 0 1.8-1.8v-.16a1.8 1.8 0 0 1 .9-1.56l.4-.23a1.8 1.8 0 0 1 1.8 0l.13.08a1.8 1.8 0 0 0 2.46-.66l.2-.35a1.8 1.8 0 0 0-.66-2.45l-.13-.08a1.8 1.8 0 0 1-.9-1.57v-.46a1.8 1.8 0 0 1 .9-1.56l.13-.08a1.8 1.8 0 0 0 .66-2.46l-.2-.34a1.8 1.8 0 0 0-2.46-.66l-.13.08a1.8 1.8 0 0 1-1.8 0l-.4-.23a1.8 1.8 0 0 1-.9-1.56v-.16a1.8 1.8 0 0 0-1.8-1.8h-.4Z"/>',
+        userCheck: '<path d="M14.5 19v-1.5a3.5 3.5 0 0 0-3.5-3.5H6a3.5 3.5 0 0 0-3.5 3.5V19"/><circle cx="8.5" cy="8" r="3.2"/><path d="m16 12 1.8 1.8L21.5 10"/>',
+        clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 1.8"/>',
+        clipboard: '<rect x="8" y="3" width="8" height="3.6" rx="1.2"/><path d="M16 4.8h2a2 2 0 0 1 2 2v12.2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6.8a2 2 0 0 1 2-2h2"/><path d="m8.8 14 1.8 1.8 3.6-3.6"/>',
+        fileText: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5"/><path d="M8.5 13h7"/><path d="M8.5 16.5h7"/><path d="M8.5 9.5h2"/>',
+        calendar: '<rect x="3.5" y="5" width="17" height="16" rx="2.5"/><path d="M3.5 10h17"/><path d="M8 3v4"/><path d="M16 3v4"/>',
+        sparkles: '<path d="M12 3.5 13.6 8.4 18.5 10 13.6 11.6 12 16.5 10.4 11.6 5.5 10 10.4 8.4Z"/><path d="M18.5 16.5l.6 1.8 1.8.6-1.8.6-.6 1.8-.6-1.8-1.8-.6 1.8-.6Z"/>',
+        chart: '<path d="M3.5 20.5h17"/><rect x="5" y="11" width="3.2" height="6.5" rx="1.1"/><rect x="10.4" y="6.5" width="3.2" height="11" rx="1.1"/><rect x="15.8" y="13.5" width="3.2" height="4" rx="1.1"/>',
+        chevron: '<path d="m9 6 6 6-6 6"/>',
+        logout: '<path d="M9 21H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3"/><path d="m15.5 16 4-4-4-4"/><path d="M19.5 12H9"/>'
+    };
 
-    const CHAT_LINK = '/chat', CHAT_BADGE = ' <span class="unread-badge-sidebar" id="global-unread"></span>';
+    const CHAT_LINK = '/chat';
+    const CHAT_BADGE = '<span class="unread-badge-sidebar" id="global-unread"></span>';
+
+    function iconSvg(name, size = 19) {
+        return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round">${ICON_PATHS[name] || ''}</svg>`;
+    }
+
+    function setSidebarCollapsed(collapsed) {
+        if (!document.body) return;
+        document.body.classList.toggle('sidebar-collapsed', collapsed);
+        const toggle = document.querySelector('.sidebar-collapse-toggle');
+        if (toggle) {
+            toggle.setAttribute('aria-expanded', String(!collapsed));
+            toggle.setAttribute('aria-label', collapsed ? 'Expandir barra lateral' : 'Minimizar barra lateral');
+            toggle.title = collapsed ? 'Expandir barra lateral' : 'Minimizar barra lateral';
+        }
+    }
+
+    function applyStoredCollapseState() {
+        try {
+            setSidebarCollapsed(window.localStorage.getItem('sidebarCollapsed') === 'true');
+        } catch (e) { /* ignore unavailable storage */ }
+    }
+
+    function toggleSidebarCollapse() {
+        if (window.innerWidth && window.innerWidth <= 1024) return;
+        const collapsed = !document.body.classList.contains('sidebar-collapsed');
+        try { window.localStorage.setItem('sidebarCollapsed', String(collapsed)); } catch (e) { /* ignore unavailable storage */ }
+        setSidebarCollapsed(collapsed);
+    }
+
+    applyStoredCollapseState();
 
     const ROLES = {
         admin: {
             userInfo:
-                '<strong id="userName">Administrador</strong>' +
-                '<span class="badge-admin">Admin</span>',
+                '<div class="sidebar-profile-text"><strong id="userName">Administrador</strong>' +
+                '<span class="badge-admin">Admin</span></div>',
             nav: [
                 { section: 'Gestión de Academia' },
-                { href: '/', label: '🏠 Dashboard' },
-                { href: '/students', label: '👥 Estudiantes' },
-                { href: '/admin/teachers', label: '👨‍🏫 Profesores' },
-                { href: '/payments', label: '💳 Pagos' },
-                { href: CHAT_LINK, label: '💬 Chat', badge: true },
-                { href: '/settings', label: '⚙️ Configuración' },
+                { href: '/', label: 'Dashboard', icon: 'home' },
+                { href: '/students', label: 'Estudiantes', icon: 'users' },
+                { href: '/admin/teachers', label: 'Profesores', icon: 'cap' },
+                { href: '/payments', label: 'Pagos', icon: 'card' },
+                { href: CHAT_LINK, label: 'Chat', icon: 'chat', badge: true },
+                { href: '/settings', label: 'Configuración', icon: 'settings' },
                 { section: 'Mi actividad docente' },
-                { href: '/teacher/dashboard', label: '👥 Mis Alumnos' },
-                { href: '/teacher/sessions', label: '📅 Sesiones' },
-                { href: '/teacher/exams', label: '📝 Exámenes' },
-                { href: '/teacher/transcripts', label: '📝 Transcripciones' },
-                { href: '/teacher/calendar', label: '🗓️ Calendario' },
-                { href: '/ai-tutor', label: '🤖 Asistente IA' }
+                { href: '/teacher/dashboard', label: 'Mis Alumnos', icon: 'userCheck' },
+                { href: '/teacher/sessions', label: 'Sesiones', icon: 'clock' },
+                { href: '/teacher/exams', label: 'Exámenes', icon: 'clipboard' },
+                { href: '/teacher/transcripts', label: 'Transcripciones', icon: 'fileText' },
+                { href: '/teacher/calendar', label: 'Calendario', icon: 'calendar' },
+                { href: '/ai-tutor', label: 'Asistente IA', icon: 'sparkles' }
             ]
         },
         teacher: {
             userInfo:
-                '<strong id="teacher-name" style="display:block;color:white;font-size:0.95rem;margin-bottom:0.4rem;">Cargando...</strong>' +
+                '<div class="sidebar-profile-text"><strong id="teacher-name">Cargando...</strong>' +
                 '<span id="teacher-role-badge" class="badge-teacher">PROFESOR</span>' +
-                '<div style="margin-top:0.5rem;font-size:0.8rem;color:#94a3b8;"><b id="teacher-code" style="color:white;">Código: ---</b></div>',
+                '<div class="sidebar-user-code">Código: <b id="teacher-code">---</b></div></div>',
             nav: [
-                { href: '/teacher/dashboard', label: '👥 Mis Alumnos' },
-                { href: '/teacher/sessions', label: '📅 Sesiones' },
-                { href: '/teacher/exams', label: '📝 Exámenes' },
-                { href: '/teacher/transcripts', label: '📝 Transcripciones' },
-                { href: '/teacher/calendar', label: '🗓️ Calendario' },
-                { href: '/ai-tutor', label: '🤖 Asistente IA' },
-                { href: CHAT_LINK, label: '💬 Chat', badge: true },
-                { href: '/teacher/settings', label: '⚙️ Configuración' }
+                { href: '/teacher/dashboard', label: 'Mis Alumnos', icon: 'userCheck' },
+                { href: '/teacher/sessions', label: 'Sesiones', icon: 'clock' },
+                { href: '/teacher/exams', label: 'Exámenes', icon: 'clipboard' },
+                { href: '/teacher/transcripts', label: 'Transcripciones', icon: 'fileText' },
+                { href: '/teacher/calendar', label: 'Calendario', icon: 'calendar' },
+                { href: '/ai-tutor', label: 'Asistente IA', icon: 'sparkles' },
+                { href: CHAT_LINK, label: 'Chat', icon: 'chat', badge: true },
+                { href: '/teacher/settings', label: 'Configuración', icon: 'settings' }
             ]
         },
         student: {
             userInfo:
-                '<strong id="sidebar-name">Cargando...</strong>' +
+                '<div class="sidebar-profile-text"><strong id="sidebar-name">Cargando...</strong>' +
                 '<span class="badge-student">ALUMNO</span>' +
-                '<div style="margin-top: 0.5rem; font-size: 0.8rem; color: #94a3b8;">Código: <b id="sidebar-code" style="color: white;">---</b></div>',
+                '<div class="sidebar-user-code">Código: <b id="sidebar-code">---</b></div></div>',
             nav: [
-                { href: '/student-portal', label: '🏠 Mi Panel' },
-                { href: '/student-portal/calendar', label: '📅 Mi Calendario' },
-                { href: '/student-portal/exams', label: '📝 Mis Notas' },
-                { href: '/student-portal/payments', label: '💳 Mis Pagos' },
-                { href: '/exam-simulator', label: '📋 Simulacro' },
-                { href: '/ai-tutor', label: '🤖 Tutor IA' },
-                { href: CHAT_LINK, label: '💬 Chat' }
+                { href: '/student-portal', label: 'Mi Panel', icon: 'home' },
+                { href: '/student-portal/calendar', label: 'Mi Calendario', icon: 'calendar' },
+                { href: '/student-portal/exams', label: 'Mis Notas', icon: 'clipboard' },
+                { href: '/student-portal/payments', label: 'Mis Pagos', icon: 'card' },
+                { href: '/exam-simulator', label: 'Simulacro', icon: 'chart' },
+                { href: '/ai-tutor', label: 'Tutor IA', icon: 'sparkles' },
+                { href: CHAT_LINK, label: 'Chat', icon: 'chat', badge: true }
             ]
         }
     };
@@ -69,23 +116,30 @@
         return h === '/' ? path === '/' : (path === h || path.startsWith(h + '/'));
     }
 
-    function render(role) {
+    function renderSidebarNavHTML(role) {
         const cfg = ROLES[role] || ROLES.admin;
-        const nav = cfg.nav.map(item => {
+        return cfg.nav.map(item => {
             if (item.section) return `<div class="nav-section-title">${item.section}</div>`;
             const active = isActive(item.href) ? ' class="active"' : '';
-            const badge = item.badge ? CHAT_BADGE : '';
-            return `<a href="${item.href}"${active}>${item.label}${badge}</a>`;
+            const badge = item.badge ? ` ${CHAT_BADGE}` : '';
+            return `<a href="${item.href}"${active}><span class="sb-nav-ico">${iconSvg(item.icon)}</span><span class="sb-nav-txt">${item.label}</span>${badge}</a>`;
         }).join('\n');
+    }
 
+    function render(role) {
+        const cfg = ROLES[role] || ROLES.admin;
         return `<aside>
-            <h1>AcademiaPro</h1>
+            <h1>
+                <span class="sidebar-brand-mark">${iconSvg('cap', 20)}</span>
+                <span class="sidebar-brand-text">Academia<span>Pro</span></span>
+                <button type="button" class="sidebar-collapse-toggle" onclick="window.toggleSidebarCollapse()" aria-label="Minimizar barra lateral" aria-expanded="true" title="Minimizar barra lateral">${iconSvg('chevron', 18)}</button>
+            </h1>
             <div class="user-info">${cfg.userInfo}</div>
-            <nav id="mainNav">${nav}</nav>
-            <div style="margin-top: auto;">
-                <button class="Btn" onclick="window.location.href='/auth/logout'">
-                    <div class="sign">${LOGOUT_SVG}</div>
-                    <div class="text">Logout</div>
+            <nav id="mainNav">${renderSidebarNavHTML(role)}</nav>
+            <div class="sidebar-actions">
+                <button type="button" class="sidebar-logout-btn" onclick="window.location.href='/auth/logout'" aria-label="Cerrar sesión">
+                    <span class="sidebar-logout-icon">${iconSvg('logout', 18)}</span>
+                    <span class="sidebar-logout-text">Cerrar sesión</span>
                 </button>
             </div>
         </aside>`;
@@ -95,7 +149,11 @@
         const el = document.getElementById('sidebar-mount');
         if (!el) return;
         el.outerHTML = render(el.getAttribute('data-role') || 'admin');
+        setSidebarCollapsed(document.body.classList.contains('sidebar-collapsed'));
     }
+
+    window.renderSidebarNavHTML = renderSidebarNavHTML;
+    window.toggleSidebarCollapse = toggleSidebarCollapse;
 
     // Mount synchronously if the placeholder is already parsed (script placed right
     // after it); otherwise wait for DOMContentLoaded. Running before the page's own
