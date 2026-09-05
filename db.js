@@ -597,6 +597,13 @@ async function initDb() {
     // Ensure academy_id exists on settings (for older deploys)
     "ALTER TABLE settings ADD COLUMN IF NOT EXISTS academy_id INTEGER",
 
+    // Ensure teacher payment columns exist on older deploys
+    "ALTER TABLE teacher_payments ADD COLUMN IF NOT EXISTS academy_id INTEGER",
+    "ALTER TABLE teacher_payments ADD COLUMN IF NOT EXISTS paid INTEGER DEFAULT 0",
+    "ALTER TABLE teacher_payments ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+    "UPDATE teacher_payments SET academy_id = (SELECT academy_id FROM users WHERE users.id = teacher_payments.teacher_id) WHERE academy_id IS NULL",
+    "UPDATE teacher_payments SET paid = 1 WHERE status = 'paid' AND (paid IS NULL OR paid = 0)",
+
     // Gmail OAuth + transcript email columns on users
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS transcript_email VARCHAR(255)",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS gmail_access_token TEXT",
