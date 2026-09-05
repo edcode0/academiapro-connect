@@ -320,7 +320,8 @@ async function initDb() {
             file_url TEXT,
             file_name TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            read BOOLEAN DEFAULT FALSE
+            read BOOLEAN DEFAULT FALSE,
+            type TEXT DEFAULT 'text'
         )`,
     `CREATE TABLE IF NOT EXISTS rooms (
             id ${idType},
@@ -476,6 +477,7 @@ async function initDb() {
     "ALTER TABLE messages ADD COLUMN file_name TEXT",
     "ALTER TABLE messages ADD COLUMN file_type TEXT",
     "ALTER TABLE messages ADD COLUMN read INTEGER DEFAULT 0",
+    "ALTER TABLE messages ADD COLUMN type TEXT DEFAULT 'text'",
 
     `CREATE TABLE IF NOT EXISTS available_slots (
       id ${idType},

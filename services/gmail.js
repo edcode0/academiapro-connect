@@ -350,9 +350,9 @@ module.exports = function makeGmailService(io) {
                         promptHtml = buildHomeworkReminderPrompt(reminder.id, reminder.homeworkList);
                         await tx.query(
                             isPostgres
-                                ? `INSERT INTO messages (room_id, sender_id, academy_id, content, created_at) VALUES ($1, $2, $3, $4, NOW())`
-                                : `INSERT INTO messages (room_id, sender_id, academy_id, content, created_at) VALUES ($1, $2, $3, $4, datetime('now'))`,
-                            [roomId, teacher.id, teacher.academy_id, promptHtml]
+                                ? `INSERT INTO messages (room_id, sender_id, academy_id, content, type, created_at) VALUES ($1, $2, $3, $4, $5, NOW())`
+                                : `INSERT INTO messages (room_id, sender_id, academy_id, content, type, created_at) VALUES ($1, $2, $3, $4, $5, datetime('now'))`,
+                            [roomId, teacher.id, teacher.academy_id, promptHtml, 'html_card']
                         );
                     }
 
@@ -387,6 +387,7 @@ module.exports = function makeGmailService(io) {
                         sender_name: teacher.name,
                         sender_role: 'teacher',
                         content:     promptHtml,
+                        type:        'html_card',
                         created_at:  new Date().toISOString()
                     });
                 }

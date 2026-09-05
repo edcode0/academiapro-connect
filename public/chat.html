@@ -787,7 +787,7 @@
 
             return `<div class="msg ${isMine ? 'sent' : 'received'}" data-id="${msg.id}">
         <div class="bubble">
-            ${msg.content ? `<div>${escapeHtml(msg.content)}</div>` : ''}
+            ${msg.content ? `<div>${msg.type === 'html_card' ? msg.content : escapeHtml(msg.content)}</div>` : ''}
             ${fileHTML}
         </div>
         <div class="msg-info">
