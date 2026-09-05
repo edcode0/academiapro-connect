@@ -10,7 +10,8 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AcademiaPro - Dashboard</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/glassmorphism.css">
+    <link rel="stylesheet" href="/shared-dashboard.css">
     <style>
         :root {
             --primary: #1e293b;
@@ -263,9 +264,94 @@
         .notif-msg { font-size: 12px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .notif-time { font-size: 11px; color: #94a3b8; margin-top: 2px; }
         .notif-empty { padding: 32px 16px; text-align: center; color: #94a3b8; font-size: 13px; }
+
+        /* Dashboard redesign */
+        :root {
+            --primary: #211f2e;
+            --accent: #7c3aed;
+            --accent2: #6366f1;
+            --background: linear-gradient(165deg, #faf9fe 0%, #f3f0fa 60%, #efeaf8 100%);
+            --card-bg: #ffffff;
+            --text-main: #211f2e;
+            --text-muted: #7b7790;
+            --border: #efecf7;
+        }
+
+        html body { background: var(--background); color: var(--text-main); }
+        body main.main { flex: 1; min-width: 0; min-height: 100vh; margin-left: 260px; padding: 30px 36px 44px; overflow-y: auto; }
+        .main::-webkit-scrollbar { width: 10px; }
+        .main::-webkit-scrollbar-thumb { background: rgba(124, 58, 237, .14); border-radius: 99px; border: 3px solid transparent; background-clip: padding-box; }
+        .tb { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; margin-bottom: 28px; }
+        .tb-left { min-width: 0; }
+        .tb-right { display: flex; align-items: center; gap: 12px; flex: none; }
+        .crumb { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 700; color: var(--accent); }
+        .crumb-ico, .icon-slot { display: grid; place-items: center; }
+        .hello { font-size: 31px; font-weight: 800; letter-spacing: -.025em; margin: 8px 0 0; }
+        .subtitle { margin: 7px 0 0; color: var(--text-muted); font-size: 14.5px; font-weight: 500; }
+        .icon-btn { position: relative !important; width: 46px !important; height: 46px !important; border-radius: 13px !important; border: 1px solid #ece8f7 !important; background: #fff !important; color: #6f6b86 !important; display: grid !important; place-items: center !important; cursor: pointer !important; font-weight: 400 !important; box-shadow: none !important; transition: .15s !important; }
+        .icon-btn:hover { background: #fff !important; color: var(--accent) !important; border-color: #c4b5fd !important; box-shadow: none !important; transition: .15s !important; transform: translateY(-1px) !important; }
+        .nb-dot { position: absolute; top: 11px; right: 12px; width: 8px; min-width: 0; height: 8px; padding: 0; line-height: 1; border-radius: 50%; background: #ef4444; border: 2px solid #fff; }
+        .notif-bell-wrap { position: relative; display: inline-flex; align-items: center; }
+        .notif-bell { font-size: inherit; padding: 0; }
+        .btn-primary { display: inline-flex; align-items: center; gap: 8px; height: 46px; padding: 0 20px; border-radius: 13px; border: 0; cursor: pointer; font-family: inherit; font-size: 15px; font-weight: 700; color: #fff; background: linear-gradient(135deg, var(--accent), var(--accent2)); box-shadow: 0 10px 22px -8px rgba(124, 58, 237, .65); transition: .16s; }
+        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 15px 28px -8px rgba(124, 58, 237, .7); }
+        .btn-primary:active { transform: translateY(0); }
+        .unassigned-warning { display: none; align-items: center; gap: 12px; padding: 14px 16px; margin-bottom: 22px; border: 1px solid #fde68a; border-radius: 12px; background: #fffbeb; color: #92400e; font-size: 13px; font-weight: 600; }
+        .unassigned-warning a { margin-left: auto; color: #92400e; font-weight: 700; text-decoration: underline; }
+        .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin-bottom: 22px; }
+        .kpi { --hue: 256; position: relative; overflow: hidden; padding: 20px; background: #fff; border: 1px solid #efecf7; border-radius: 18px; box-shadow: 0 2px 5px rgba(30, 20, 60, .03); transition: .18s; }
+        .kpi::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, hsl(var(--hue) 72% 58%), hsl(var(--hue) 72% 70%)); }
+        .kpi:hover { transform: translateY(-2px); box-shadow: 0 14px 28px -14px hsl(var(--hue) 50% 40% / .4); border-color: hsl(var(--hue) 60% 89%); }
+        .kpi-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+        .kpi-ico { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; background: hsl(var(--hue) 76% 95%); color: hsl(var(--hue) 55% 47%); }
+        .kpi-more { border: 0 !important; background: transparent !important; color: #cbc7d8 !important; cursor: pointer !important; padding: 5px !important; border-radius: 8px !important; display: grid !important; place-items: center !important; font-weight: 400 !important; box-shadow: none !important; transition: .15s !important; }
+        .kpi-more:hover { color: #8b87a8 !important; background: #f4f2fa !important; border: 0 !important; border-radius: 8px !important; font-weight: 400 !important; box-shadow: none !important; transition: .15s !important; transform: none !important; }
+        .kpi-label { font-size: 13.5px; font-weight: 600; color: var(--text-muted); }
+        .kpi-val { font-size: 34px; font-weight: 800; letter-spacing: -.02em; margin-top: 2px; line-height: 1.15; }
+        .kpi-foot { margin-top: 11px; font-size: 12.5px; font-weight: 600; color: #a29ebb; display: flex; align-items: center; gap: 5px; }
+        .kpi-foot.good { color: #059669; }
+        .kpi.border-blue { --hue: 256; } .kpi.border-green { --hue: 156; } .kpi.border-orange { --hue: 38; } .kpi.border-purple { --hue: 291; } .kpi.border-red { --hue: 0; }
+        .kpi.border-red::before { background: linear-gradient(90deg, #ef4444, #f87171); }
+        .lower { display: grid; grid-template-columns: 1fr 366px; gap: 18px; align-items: start; }
+        .panel { background: #fff; border: 1px solid #efecf7; border-radius: 18px; padding: 22px 24px; box-shadow: 0 2px 5px rgba(30, 20, 60, .03); }
+        .panel-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+        .panel-head h2 { font-size: 18px; font-weight: 800; margin: 0; letter-spacing: -.01em; }
+        .link-btn { display: inline-flex; align-items: center; gap: 4px; border: 0; background: transparent; color: var(--accent); font-family: inherit; font-weight: 700; font-size: 13.5px; cursor: pointer; padding: 6px 9px; border-radius: 9px; transition: .15s; }
+        .link-btn:hover { background: rgba(124, 58, 237, .09); }
+        .table { width: 100%; border-collapse: separate; border-spacing: 0; }
+        .thead th { padding: 0 4px 12px; border-bottom: 1px solid #f0edf6; text-align: left; font-size: 11px; font-weight: 700; letter-spacing: .06em; color: #a7a3bd; }
+        .cell { font-size: 14.5px; }
+        .trow td { padding: 14px 4px; border-bottom: 1px solid #f6f4fa; transition: background .15s; }
+        .trow:hover td { background: #faf9fe; }
+        .cell.muted { color: var(--text-muted); font-weight: 500; }
+        .cell.name { font-weight: 500; }
+        .cell.name-inner { display: flex; align-items: center; gap: 11px; }
+        .mini-av, .fav { width: 34px; height: 34px; border-radius: 10px; flex: none; display: grid; place-items: center; font-weight: 800; font-size: 13px; color: #fff; background: linear-gradient(140deg, #10b981, #059669); }
+        .mini-av { width: 32px; height: 32px; border-radius: 9px; }
+        .cell.name a { color: var(--accent); font-weight: 700; text-decoration: none; cursor: pointer; }
+        .cell.name a:hover { text-decoration: underline; }
+        .pill { display: inline-flex; align-items: center; font-size: 12px; font-weight: 700; padding: 4px 11px; border-radius: 999px; }
+        .pill.risk, .badge-risk { background: #fee2e2; color: #dc2626; }
+        .pill.ok, .badge-active { background: #d1fae5; color: #059669; }
+        .empty-state { padding: 2rem 4px !important; text-align: center; color: #a29ebb; font-size: 13px; }
+        .empty-state a { color: var(--accent); }
+        .add-row { margin-top: 10px; width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 13px; border: 1.5px dashed #ddd6ee; border-radius: 12px; background: transparent; color: #9b97b3; font-family: inherit; font-weight: 700; font-size: 13.5px; cursor: pointer; transition: .15s; }
+        .add-row:hover { border-color: var(--accent); color: var(--accent); background: rgba(124, 58, 237, .05); }
+        .feed { list-style: none; margin: 0; padding: 0; }
+        .fitem { display: flex; gap: 13px; padding: 12px 0; align-items: center; }
+        .fitem:not(:last-child) { border-bottom: 1px solid #f6f4fa; }
+        .fbody { min-width: 0; } .ftitle { font-size: 14px; font-weight: 500; color: #3f3d52; } .ftitle strong { font-weight: 800; color: var(--text-main); }
+        .fdate { display: flex; align-items: center; gap: 5px; margin-top: 3px; font-size: 12px; color: #a29ebb; font-weight: 600; }
+        .modal-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 1.5rem; }
+        .modal-actions button { min-width: 104px; padding: 0.75rem 1.5rem !important; }
+        .modal-actions .btn-secondary { background: #f1f5f9 !important; border: 1px solid #e2e8f0 !important; border-radius: 10px !important; color: #475569 !important; font-weight: 600 !important; box-shadow: none !important; transition: .15s !important; }
+        .modal-actions .btn-secondary:hover { background: #e2e8f0 !important; border-color: #cbd5e1 !important; color: #334155 !important; box-shadow: none !important; transform: none !important; }
+        body.sidebar-collapsed main.main { margin-left: var(--sb-rail-width); }
+        @media (max-width: 1180px) { .lower { grid-template-columns: 1fr; } }
+        @media (max-width: 1024px) { body main.main { margin-left: 0; } }
+        @media (max-width: 980px) { .kpis { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 620px) { .kpis { grid-template-columns: 1fr; } body main.main { padding: 22px 18px 30px; } .tb { flex-direction: column; } .tb-right { width: 100%; justify-content: flex-end; } .hello { font-size: 27px; } .panel { padding: 18px 16px; overflow-x: auto; } .table { min-width: 590px; } }
     </style>
-    <link rel="stylesheet" href="/glassmorphism.css">
-    <link rel="stylesheet" href="/shared-dashboard.css">
     <script src="/global.js"></script>
 </head>
 
@@ -316,82 +402,109 @@
     <div id="sidebar-mount" data-role="admin"></div>
     <script src="/sidebar.js"></script>
 
-    <main>
-        <header>
+    <main class="main">
+        <header class="tb">
+            <div class="tb-left">
                 <button class="hamburger-btn" onclick="toggleMobileNav()">&#9776;</button>
-                
-            <div class="academy-header">
-                <p class="academy-name">🏫 <span id="academyNameDisplay">...</span></p>
-                <h1 class="greeting" id="welcome-title">¡Hola!</h1>
+                <div class="crumb">
+                    <span class="crumb-ico"><span class="icon-slot" data-icon="building" data-icon-size="15"></span></span>
+                    <span id="academyNameDisplay">...</span>
+                    <span class="icon-slot" data-icon="chevron" data-icon-size="13"></span>
+                </div>
+                <h1 class="hello" id="welcome-title">¡Hola!</h1>
+                <p class="subtitle">Este es el resumen de tu academia.</p>
             </div>
-            <div style="display:flex;align-items:center;gap:12px;">
+            <div class="tb-right">
                 <div class="notif-bell-wrap" id="notifBellWrap">
-                    <button class="notif-bell" id="notifBellBtn" onclick="toggleNotifDropdown()" aria-label="Notificaciones">🔔<span class="notif-badge" id="notifBadge" style="display:none;"></span></button>
+                    <button class="notif-bell icon-btn" id="notifBellBtn" onclick="toggleNotifDropdown()" aria-label="Notificaciones">
+                        <span class="icon-slot" data-icon="bell" data-icon-size="20"></span>
+                        <span class="notif-badge nb-dot" id="notifBadge" style="display:none;"></span>
+                    </button>
                     <div class="notif-dropdown" id="notifDropdown">
                         <div class="notif-dropdown-header"><span>Notificaciones</span><button class="notif-mark-all" onclick="markAllNotifRead()">Marcar todas leídas</button></div>
                         <div id="notifList" class="notif-list"><div class="notif-empty">No hay notificaciones</div></div>
                     </div>
                 </div>
-                <button onclick="openModal()"
-                    style="background: var(--accent); color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 0.5rem; font-weight: 600; cursor: pointer;">
-                    + Nueva Inscripción
+                <button class="btn-primary" onclick="openModal()">
+                    <span class="icon-slot" data-icon="plus" data-icon-size="18"></span>
+                    Nueva Inscripción
                 </button>
             </div>
         </header>
 
-        <div id="unassigned-warning"
-            style="display: none; background: #fffbeb; border: 1px solid #fde68a; color: #92400e; padding: 1rem; border-radius: 0.75rem; margin-bottom: 2rem; align-items: center; gap: 0.75rem;">
+        <div id="unassigned-warning" class="unassigned-warning">
             <span>⚠️</span>
             <span id="unassigned-warning-text"></span>
-            <a href="/students"
-                style="margin-left: auto; color: #92400e; font-weight: 600; text-decoration: underline;">Ver
-                estudiantes</a>
+            <a href="/students">Ver estudiantes</a>
         </div>
 
-        <div class="stats-grid">
-            <div class="stat-card border-blue">
-                <div class="icon">👥</div>
-                <h3>Total Estudiantes</h3>
-                <div class="value" id="total-students">0</div>
-            </div>
-            <div class="stat-card border-green">
-                <div class="icon">📅</div>
-                <h3>Sesiones Registradas</h3>
-                <div class="value" id="total-sessions">0</div>
-            </div>
-            <div class="stat-card border-orange" id="card-payments">
-                <div class="icon">💰</div>
-                <h3>Pagos Pendientes</h3>
-                <div class="value" id="pending-payments">0 €</div>
-            </div>
-            <div class="stat-card border-purple">
-                <div class="icon">📊</div>
-                <h3>Calificación Media</h3>
-                <div class="value" id="avg-score">8.2</div>
-            </div>
-        </div>
+        <section class="kpis">
+            <article class="kpi border-blue">
+                <div class="kpi-head">
+                    <span class="kpi-ico"><span class="icon-slot" data-icon="users" data-icon-size="20"></span></span>
+                    <button class="kpi-more" type="button" aria-label="Más"><span class="icon-slot" data-icon="dots" data-icon-size="16"></span></button>
+                </div>
+                <div class="kpi-label">Total Estudiantes</div>
+                <div class="kpi-val" id="total-students">0</div>
+                <div class="kpi-foot">Alumnos activos</div>
+            </article>
+            <article class="kpi border-green">
+                <div class="kpi-head">
+                    <span class="kpi-ico"><span class="icon-slot" data-icon="clock" data-icon-size="20"></span></span>
+                    <button class="kpi-more" type="button" aria-label="Más"><span class="icon-slot" data-icon="dots" data-icon-size="16"></span></button>
+                </div>
+                <div class="kpi-label">Sesiones Registradas</div>
+                <div class="kpi-val" id="total-sessions">0</div>
+                <div class="kpi-foot">Sesiones en total</div>
+            </article>
+            <article class="kpi border-orange" id="card-payments">
+                <div class="kpi-head">
+                    <span class="kpi-ico"><span class="icon-slot" data-icon="card" data-icon-size="20"></span></span>
+                    <button class="kpi-more" type="button" aria-label="Más"><span class="icon-slot" data-icon="dots" data-icon-size="16"></span></button>
+                </div>
+                <div class="kpi-label">Pagos Pendientes</div>
+                <div class="kpi-val" id="pending-payments">0 €</div>
+                <div class="kpi-foot good"><span class="icon-slot" data-icon="check" data-icon-size="14"></span>Todo al día</div>
+            </article>
+            <article class="kpi border-purple">
+                <div class="kpi-head">
+                    <span class="kpi-ico"><span class="icon-slot" data-icon="chart" data-icon-size="20"></span></span>
+                    <button class="kpi-more" type="button" aria-label="Más"><span class="icon-slot" data-icon="dots" data-icon-size="16"></span></button>
+                </div>
+                <div class="kpi-label">Calificación Media</div>
+                <div class="kpi-val" id="avg-score">8.2</div>
+                <div class="kpi-foot">Media global</div>
+            </article>
+        </section>
 
-        <div class="content-grid">
-            <div class="card">
-                <h4>Estudiantes Recientes</h4>
-                <table>
-                    <thead>
+        <section class="lower">
+            <article class="panel">
+                <div class="panel-head">
+                    <h2>Estudiantes Recientes</h2>
+                    <a class="link-btn" href="/students">Ver todos <span class="icon-slot" data-icon="chevron" data-icon-size="14"></span></a>
+                </div>
+                <table class="table">
+                    <thead class="thead">
                         <tr>
-                            <th>Nombre</th>
-                            <th>Curso</th>
-                            <th>Asignatura</th>
-                            <th>Estado</th>
+                            <th>NOMBRE</th>
+                            <th>CURSO</th>
+                            <th>ASIGNATURA</th>
+                            <th>ESTADO</th>
                         </tr>
                     </thead>
                     <tbody id="students-table"></tbody>
                 </table>
-            </div>
+                <button class="add-row" type="button" onclick="openModal()"><span class="icon-slot" data-icon="plus" data-icon-size="16"></span> Añadir estudiante</button>
+            </article>
 
-            <div class="card">
-                <h4>Actividad Reciente</h4>
-                <div id="activity-list"></div>
+            <div class="panel">
+                <div class="panel-head">
+                    <h2>Actividad Reciente</h2>
+                    <button class="kpi-more" type="button" aria-label="Más"><span class="icon-slot" data-icon="dots" data-icon-size="16"></span></button>
+                </div>
+                <div id="activity-list" class="feed"></div>
             </div>
-        </div>
+        </section>
     </main>
 
     <!-- New Student Modal -->
@@ -424,12 +537,9 @@
                         <option value="">Sin asignar</option>
                     </select>
                 </div>
-                <div class="modal-actions"
-                    style="display: flex; justify-content: flex-end; gap: 1rem; margin-top: 1.5rem;">
-                    <button type="button" onclick="closeModal()"
-                        style="padding: 0.75rem 1rem; border: none; background: #f1f5f9; border-radius: 0.5rem; cursor: pointer;">Cancelar</button>
-                    <button type="submit"
-                        style="padding: 0.75rem 1.5rem; background: var(--accent); color: white; border: none; border-radius: 0.5rem; font-weight: 600; cursor: pointer;">Guardar</button>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" onclick="closeModal()">Cancelar</button>
+                    <button type="submit">Guardar</button>
                 </div>
             </form>
         </div>
@@ -437,6 +547,10 @@
 
     <script>
         // Token is managed as httpOnly cookie by the server — no URL token handling needed
+
+        document.querySelectorAll('[data-icon]').forEach(icon => {
+            icon.innerHTML = window.iconSvg(icon.dataset.icon, icon.dataset.iconSize || 19);
+        });
 
         async function loadDashboard() {
             try {
@@ -472,13 +586,13 @@
 
                 const table = document.getElementById('students-table');
                 table.innerHTML = students.length === 0
-                    ? `<tr><td colspan="4" style="text-align:center; padding:2rem; color:#94a3b8;">No hay alumnos registrados aún. <a href="#" onclick="openModal()" style="color:#6366f1;">Añade el primero →</a></td></tr>`
+                    ? `<tr><td colspan="4" class="cell empty-state">No hay alumnos registrados aún. <a href="#" onclick="openModal()">Añade el primero →</a></td></tr>`
                     : students.slice(0, 5).map(s => `
-                    <tr>
-                        <td style="font-weight: 500"><a href="/student/${s.id}" style="color: var(--accent); text-decoration: none; font-weight: 600;">${escapeHtml(s.name)}</a></td>
-                        <td>${s.course}</td>
-                        <td>${escapeHtml(s.subject)}</td>
-                        <td><span class="badge ${s.status === 'active' ? 'badge-active' : 'badge-risk'}">${s.status === 'active' ? 'Activo' : 'En Riesgo'}</span></td>
+                    <tr class="trow">
+                        <td class="cell name"><div class="cell name-inner"><span class="mini-av">${escapeHtml((s.name || 'A')[0].toLowerCase())}</span><a href="/student/${s.id}">${escapeHtml(s.name)}</a></div></td>
+                        <td class="cell muted">${s.course}</td>
+                        <td class="cell muted">${escapeHtml(s.subject)}</td>
+                        <td class="cell"><span class="pill ${s.status === 'active' ? 'ok' : 'risk'}">${s.status === 'active' ? 'Activo' : 'En Riesgo'}</span></td>
                     </tr>
                 `).join('');
 
@@ -506,15 +620,15 @@
                 const activityList = document.getElementById('activity-list');
                 const recentSessions = sessions.slice(-5).reverse();
                 activityList.innerHTML = recentSessions.length === 0
-                    ? `<p style="text-align:center; padding:1.5rem; color:#94a3b8; font-size:0.875rem;">Sin actividad reciente.</p>`
+                    ? `<p class="empty-state">Sin actividad reciente.</p>`
                     : recentSessions.map(s => {
                     const student = students.find(st => st.id === s.student_id);
                     return `
-                        <div style="display: flex; gap: 1rem; padding: 1rem 0; border-bottom: 1px solid var(--border);">
-                            <div style="width: 36px; height: 36px; background: #eff6ff; color: var(--accent); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700;">${student ? student.name[0] : 'S'}</div>
-                            <div>
-                                <p style="font-size: 0.875rem;"><strong>${student ? student.name : 'Estudiante'}</strong>: Sesión ${s.duration_minutes} min</p>
-                                <span style="font-size: 0.75rem; color: #64748b;">${new Date(s.date).toLocaleDateString()}</span>
+                        <div class="fitem">
+                            <div class="fav">${student ? student.name[0] : 'S'}</div>
+                            <div class="fbody">
+                                <p class="ftitle"><strong>${student ? student.name : 'Estudiante'}</strong>: Sesión ${s.duration_minutes} min</p>
+                                <span class="fdate"><span class="icon-slot">${window.iconSvg('clock', 12)}</span>${new Date(s.date).toLocaleDateString()}</span>
                             </div>
                         </div>
                     `;

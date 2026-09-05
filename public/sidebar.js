@@ -7,6 +7,11 @@
     const ICON_PATHS = {
         home: '<path d="M3 9.5 12 3l9 6.5"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9"/><path d="M9.5 20v-6h5v6"/>',
         users: '<path d="M16 19v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 17.5V19"/><circle cx="10" cy="8" r="3.2"/><path d="M19.5 19v-1.5a3.5 3.5 0 0 0-2.6-3.38"/><path d="M15.5 5.2a3.2 3.2 0 0 1 0 5.6"/>',
+        building: '<path d="M4 21V6.2l8-3 8 3V21"/><path d="M9 21v-4.5h6V21"/><path d="M8.5 9h.01"/><path d="M15.5 9h.01"/><path d="M8.5 12.5h.01"/><path d="M15.5 12.5h.01"/>',
+        bell: '<path d="M18 9a6 6 0 0 0-12 0c0 6-2.5 7.5-2.5 7.5h17S18 15 18 9Z"/><path d="M13.8 20a2 2 0 0 1-3.6 0"/>',
+        plus: '<path d="M12 5v14"/><path d="M5 12h14"/>',
+        dots: '<circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/>',
+        check: '<path d="m5 12.5 4.5 4.5L19 7"/>',
         cap: '<path d="M3 9.2 12 5l9 4.2-9 4.2-9-4.2Z"/><path d="M6.5 11v4c0 1.3 2.5 2.6 5.5 2.6s5.5-1.3 5.5-2.6v-4"/><path d="M21 9.2v4.6"/>',
         card: '<rect x="3" y="5.5" width="18" height="13" rx="2.5"/><path d="M3 9.5h18"/><path d="M6.5 14.5h3"/>',
         chat: '<path d="M20 14.5a2 2 0 0 1-2 2H8l-4 3.5V6.5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2Z"/><path d="M8.5 9.5h7"/><path d="M8.5 12.5h4"/>',
@@ -154,6 +159,7 @@
 
     window.renderSidebarNavHTML = renderSidebarNavHTML;
     window.toggleSidebarCollapse = toggleSidebarCollapse;
+    window.iconSvg = iconSvg;
 
     // Mount synchronously if the placeholder is already parsed (script placed right
     // after it); otherwise wait for DOMContentLoaded. Running before the page's own
