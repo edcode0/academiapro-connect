@@ -347,6 +347,7 @@
             <div class="tab" onclick="switchTab('simulacros-content')">📋 Simulacros</div>
             <div class="tab" onclick="switchTab('payments')">💳 Pagos</div>
             <div class="tab" onclick="switchTab('links-content')">🔗 Enlaces</div>
+            <div class="tab" onclick="switchTab('goals-content')">🎯 Objetivos</div>
         </div>
 
         <div id="sessions-content" class="tab-content active">
@@ -447,6 +448,30 @@
             </div>
             <div class="card">
                 <div id="links-list"></div>
+            </div>
+        </div>
+
+        <div id="goals-content" class="tab-content">
+            <div class="card" style="margin-bottom: 2rem;">
+                <h3 style="margin-bottom: 1.5rem; color: var(--text-main); font-size: 1.125rem;">Añadir objetivo</h3>
+                <form id="goalForm" style="display: grid; grid-template-columns: 2fr 1fr auto; gap: 1rem; align-items: end;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label for="goal-text">Objetivo</label>
+                        <textarea id="goal-text" placeholder="Ej: Mejorar la comprensión lectora" required style="min-height:48px;"></textarea>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label for="goal-target-date">Fecha objetivo</label>
+                        <input type="date" id="goal-target-date">
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="height: 48px; margin-bottom: 0;">+ Añadir</button>
+                </form>
+            </div>
+            <div class="card" style="margin-bottom: 2rem;">
+                <div id="goals-list"></div>
+            </div>
+            <div class="card">
+                <h3 style="margin-bottom: 1rem; color: var(--text-main); font-size: 1.125rem;">Últimos resultados</h3>
+                <div id="goal-exams-list"></div>
             </div>
         </div>
 
@@ -560,6 +585,7 @@
     <script>
         const studentId = window.location.pathname.split('/').pop();
         let examChart = null;
+        let profileExams = [];
 
         const ADMIN_NAV_HTML = `
             <div class="nav-section-title">Gestión de Academia</div>
@@ -609,8 +635,10 @@
 
             loadSessions(data.sessions);
             loadExams(data.exams);
+            profileExams = data.exams || [];
             loadSimulacros();
             renderLinks(data.links || []);
+            loadGoals();
         }
 
         // escapeHtml provided globally by global.js (escapes ' too)
@@ -640,6 +668,56 @@
             if (r.ok) loadLinks();
         }
 
+        function renderGoals(goals) {
+            const container = document.getElementById('goals-list');
+            container.innerHTML = goals.length ? goals.map(g => `
+                <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; padding:0.75rem 0; border-bottom:1px solid var(--border);">
+                    <div style="flex:1; ${g.status === 'completed' ? 'text-decoration:line-through; opacity:0.65;' : ''}">
+                        <div>${escapeHtml(g.text)}</div>
+                        <div style="color:var(--text-muted); font-size:0.8rem; margin-top:0.35rem;">
+                            ${g.target_date ? `Objetivo: ${new Date(g.target_date + 'T12:00:00').toLocaleDateString('es-ES')}` : 'Sin fecha objetivo'} · Añadido por ${escapeHtml(g.created_by_name || 'Usuario')}
+                        </div>
+                    </div>
+                    <label style="display:flex; align-items:center; gap:0.35rem; white-space:nowrap; font-size:0.8rem;">
+                        <input type="checkbox" ${g.status === 'completed' ? 'checked' : ''} onchange="toggleGoal(${g.id}, this.checked)">
+                        ${g.status === 'completed' ? '✅ Completado' : 'Completar'}
+                    </label>
+                    <button onclick="deleteGoal(${g.id})" style="background:none; border:none; cursor:pointer; color:var(--text-muted); font-size:1.1rem; padding:0 0.5rem;" title="Borrar objetivo">🗑</button>
+                </div>
+            `).join('') : '<p style="color:var(--text-muted); font-size:0.875rem;">No hay objetivos guardados todavía.</p>';
+
+            const exams = profileExams.slice(0, 5);
+            document.getElementById('goal-exams-list').innerHTML = exams.length ? exams.map(e => `
+                <div style="display:flex; align-items:center; justify-content:space-between; padding:0.6rem 0; border-bottom:1px solid var(--border);">
+                    <span>${new Date(e.date).toLocaleDateString('es-ES')} · ${escapeHtml(e.subject)}</span>
+                    <strong>${e.score ?? '-'}</strong>
+                </div>
+            `).join('') : '<p style="color:var(--text-muted); font-size:0.875rem;">No hay exámenes registrados.</p>';
+        }
+
+        async function loadGoals() {
+            const r = await fetch(`/api/students/${studentId}/goals`, { credentials: 'include' });
+            if (r.ok) renderGoals(await r.json());
+        }
+
+        async function toggleGoal(goalId, completed) {
+            const r = await fetch(`/api/students/${studentId}/goals/${goalId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ status: completed ? 'completed' : 'active' })
+            });
+            if (r.ok) loadGoals();
+            else showToast('Error al actualizar el objetivo', 'error');
+        }
+
+        async function deleteGoal(goalId) {
+            if (!confirm('¿Borrar este objetivo?')) return;
+            const r = await fetch(`/api/students/${studentId}/goals/${goalId}`, { method: 'DELETE', credentials: 'include' });
+            if (r.ok) loadGoals();
+            else showToast('Error al borrar el objetivo', 'error');
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('linkForm')?.addEventListener('submit', async (e) => {
                 e.preventDefault();
@@ -655,6 +733,27 @@
                     document.getElementById('link-label').value = '';
                     document.getElementById('link-url').value = '';
                     loadLinks();
+                }
+            });
+
+            document.getElementById('goalForm')?.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const text = document.getElementById('goal-text').value.trim();
+                const target_date = document.getElementById('goal-target-date').value || null;
+                const r = await fetch(`/api/students/${studentId}/goals`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ text, target_date })
+                });
+                if (r.ok) {
+                    document.getElementById('goal-text').value = '';
+                    document.getElementById('goal-target-date').value = '';
+                    loadGoals();
+                    showToast('Objetivo añadido', 'success');
+                } else {
+                    const err = await r.json();
+                    showToast(err.error || 'Error al añadir el objetivo', 'error');
                 }
             });
         });

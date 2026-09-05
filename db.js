@@ -667,6 +667,18 @@ async function initDb() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`,
 
+    // Student goals — free-text objectives per student
+    `CREATE TABLE IF NOT EXISTS student_goals (
+      id ${idType},
+      student_id INTEGER NOT NULL,
+      academy_id INTEGER NOT NULL,
+      created_by INTEGER NOT NULL,
+      text TEXT NOT NULL,
+      target_date TEXT,
+      status TEXT DEFAULT 'active',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+
     // Recurring session rules — each row represents a weekly pattern
     `CREATE TABLE IF NOT EXISTS recurring_sessions (
       id ${idType},
@@ -749,6 +761,10 @@ async function initDb() {
     // student_links
     'CREATE INDEX IF NOT EXISTS idx_student_links_student_id ON student_links(student_id)',
     'CREATE INDEX IF NOT EXISTS idx_student_links_academy_id ON student_links(academy_id)',
+
+    // student_goals
+    'CREATE INDEX IF NOT EXISTS idx_student_goals_student_id ON student_goals(student_id)',
+    'CREATE INDEX IF NOT EXISTS idx_student_goals_academy_id ON student_goals(academy_id)',
 
     // recurring_sessions
     'CREATE INDEX IF NOT EXISTS idx_recurring_sessions_academy_id ON recurring_sessions(academy_id)',
