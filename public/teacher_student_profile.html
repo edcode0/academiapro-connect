@@ -587,23 +587,6 @@
         let examChart = null;
         let profileExams = [];
 
-        const ADMIN_NAV_HTML = `
-            <div class="nav-section-title">Gestión de Academia</div>
-            <a href="/">🏠 Dashboard</a>
-            <a href="/students">👥 Estudiantes</a>
-            <a href="/admin/teachers">👨‍🏫 Profesores</a>
-            <a href="/payments">💳 Pagos</a>
-            <a href="/chat">💬 Chat <span class="unread-badge-sidebar" id="global-unread"></span></a>
-            <a href="/settings">⚙️ Configuración</a>
-            <div class="nav-section-title">Mi actividad docente</div>
-            <a href="/teacher/dashboard">👥 Mis Alumnos</a>
-            <a href="/teacher/sessions">📅 Sesiones</a>
-            <a href="/teacher/exams">📝 Exámenes</a>
-            <a href="/teacher/transcripts">📝 Transcripciones</a>
-            <a href="/teacher/calendar">🗓️ Calendario</a>
-            <a href="/ai-tutor">🤖 Asistente IA</a>
-        `;
-
         async function init() {
             const userRes = await fetch('/auth/me');
             const user = await userRes.json();
@@ -613,7 +596,7 @@
             // If admin, show full admin two-section nav and ADMIN badge
             if (user.role === 'admin') {
                 document.querySelector('aside .role-tag').textContent = 'ADMIN';
-                document.getElementById('mainNav').innerHTML = ADMIN_NAV_HTML;
+                document.getElementById('mainNav').innerHTML = window.renderSidebarNavHTML('admin');
             }
 
             // Auto-highlight active link
