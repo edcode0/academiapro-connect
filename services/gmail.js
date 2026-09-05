@@ -239,15 +239,29 @@ module.exports = function makeGmailService(io) {
                     analysisData.google_transcript_url = recordingLink;
                 }
 
-                // Match student by name — guard against empty string (includes('') is always true)
-                const nameToMatch = (analysisData.student_name || '').trim();
-                const exactMatch = nameToMatch.length >= 2
-                    ? students.find(s => {
-                        const n = s.name.toLowerCase();
-                        const m = nameToMatch.toLowerCase();
-                        return n.includes(m) || m.includes(n);
-                      })
-                    : null;
+                // Match student by the most recent booked slot, falling back to an exact name match.
+                const toMadridNaive = ms => new Date(ms)
+                    .toLocaleString('sv-SE', { timeZone: 'Europe/Madrid' })
+                    .replace(' ', 'T');
+                const emailDate = toMadridNaive(emailMs);
+                const windowStart = toMadridNaive(emailMs - 6 * 60 * 60 * 1000);
+                const slotMatch = await db.query(
+                    `SELECT student_id FROM available_slots
+                     WHERE teacher_id = $1 AND is_booked = TRUE AND student_id IS NOT NULL
+                       AND start_datetime <= $2 AND start_datetime >= $3
+                     ORDER BY start_datetime DESC LIMIT 1`,
+                    [teacher.id, emailDate, windowStart]
+                );
+                const slotStudentId = (slotMatch.rows || [])[0]?.student_id;
+                const slotStudent = slotStudentId ? students.find(s => s.id === slotStudentId) : null;
+
+                let exactMatch = slotStudent;
+                if (!exactMatch) {
+                    const nameToMatch = (analysisData.student_name || '').trim().toLowerCase();
+                    exactMatch = nameToMatch.length >= 2
+                        ? students.find(s => s.name.trim().toLowerCase() === nameToMatch)
+                        : null;
+                }
 
                 if (!exactMatch) {
                     console.warn(`[Gmail] No student match for student_name="${analysisData.student_name}" — saving as pending`);
