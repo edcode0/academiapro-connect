@@ -858,9 +858,22 @@
             }
         }
 
+        let deleteConfirmTimeout;
         document.getElementById('delete-account-btn').addEventListener('click', async function () {
-            const confirmed = confirm('¿Estás seguro? Esta acción eliminará tu cuenta permanentemente y no se puede deshacer.');
-            if (!confirmed) return;
+            if (!this.dataset.deleteConfirmed) {
+                this.dataset.deleteConfirmed = 'true';
+                this.textContent = '¿Seguro? Haz clic de nuevo';
+                clearTimeout(deleteConfirmTimeout);
+                deleteConfirmTimeout = setTimeout(() => {
+                    delete this.dataset.deleteConfirmed;
+                    this.textContent = '🗑️ Eliminar mi cuenta';
+                }, 5000);
+                return;
+            }
+
+            clearTimeout(deleteConfirmTimeout);
+            delete this.dataset.deleteConfirmed;
+            this.disabled = true;
 
             try {
                 const response = await fetch('/api/auth/delete-account', {
@@ -874,9 +887,11 @@
                     window.location.href = '/login';
                 } else {
                     showToast(data.error || 'Error al eliminar la cuenta', 'error');
+                    this.disabled = false;
                 }
             } catch (err) {
                 showToast('Error de conexión', 'error');
+                this.disabled = false;
             }
         });
 
