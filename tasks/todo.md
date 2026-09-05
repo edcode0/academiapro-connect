@@ -67,7 +67,12 @@ Causa raíz (logs Railway `web`): bucle de reproceso agota los 100k tokens/día 
 - [x] **T4** `invalid_grant` → limpiar tokens + notificar al profesor (profes 1 y 9 llevaban días caídos en silencio).
 - [x] **T5** `tests/gmail-resilience.js` (4 casos) + wired en `npm test`.
 - [x] **T6** OBSOLETO: Groq quedó bloqueando con 403 "Access denied" desde 2026-08-20 (no era cuota, algo distinto — org/región). Migrado el proveedor de IA entero a DeepSeek (`deepseek-chat` vía SDK `openai`) 2026-08-22. Ya no aplica subir tier de Groq.
-- [ ] **T7** Tras el deploy de DeepSeek (2026-08-22 10:32 UTC): verificar que la cola de transcripciones atascada (3 pending del incidente Groq) drenó en los ticks siguientes, y avisar a profes 1 y 9 de reconectar Gmail si siguen con `invalid_grant`.
+- [x] **T7** Cola post-migración DeepSeek drenó correctamente en 2026-08-22. Cerrado.
+
+## INCIDENTE — 2026-09-05  [BLOQUEANTE, requiere acción de Edu]
+DeepSeek sin saldo: `402 Insufficient Balance` desde 2026-09-03 ~14:00 (logs Railway, servicio `web`). Bloquea transcripciones (profesor 17, 5 pendientes y creciendo) y probablemente el tutor IA de toda la academia. La alerta de stall (`alertAdmins` en `services/gmail.js`) SÍ está avisando in-app a los admins, 1x/día/profesor.
+- [ ] Edu: recargar saldo en la cuenta de **DeepSeek** (no Groq — `services/groq.js` es solo el nombre heredado del fichero, el cliente real es DeepSeek).
+- [ ] Tras recarga: verificar que el backlog del profesor 17 se drena y que el tutor IA vuelve a responder.
 Verif: 65/65 smoke · homework-reminders OK · 4/4 gmail-resilience.
 
 ---
