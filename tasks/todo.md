@@ -71,9 +71,11 @@ Causa raíz (logs Railway `web`): bucle de reproceso agota los 100k tokens/día 
 
 ## INCIDENTE — 2026-09-05  [BLOQUEANTE, requiere acción de Edu]
 DeepSeek sin saldo: `402 Insufficient Balance` desde 2026-09-03 ~14:00 (logs Railway, servicio `web`). Bloquea transcripciones (profesor 17, 5 pendientes y creciendo) y probablemente el tutor IA de toda la academia. La alerta de stall (`alertAdmins` en `services/gmail.js`) SÍ está avisando in-app a los admins, 1x/día/profesor.
-## HALLAZGO — 2026-09-05  [PENDIENTE decisión de Edu, dinero real]
-`teacher_payments` en producción (Postgres) NO tiene columna `academy_id`, y tiene `status` en vez de `paid`. `db.js` declara ambas en su `CREATE TABLE`, pero es `IF NOT EXISTS` — nunca corrió sobre la tabla ya existente, y nunca hubo `ALTER TABLE` para backfillearla. `routes/payments.js` y `routes/teachers.js` llevan tiempo haciendo queries a `teacher_payments.academy_id` y `.paid` que no existen — probablemente la gestión de pagos a profesores (marcar como pagado, ver historial) lleva rota en producción. NO tocado — es dato de pagos, requiere que Edu confirme antes de tocar el esquema o la lógica.
-- [ ] Edu: decidir si migrar la tabla (`ALTER TABLE teacher_payments ADD COLUMN academy_id`, backfill desde `teacher_id`→`users.academy_id`, revisar `status` vs `paid`) o si esas rutas ya no se usan y se pueden retirar.
+## HALLAZGO — 2026-09-05  ✅ ARREGLADO Y DESPLEGADO mismo día
+`teacher_payments` en producción no tenía `academy_id`/`paid`/`created_at`. Añadidas vía `ALTER TABLE ADD COLUMN IF NOT EXISTS` + backfill idempotente en `db.js` (migración normal, corre sola en cada boot). Verificado en producción tras deploy: columnas presentes, `paid` bien migrado desde `status='paid'`. Una fila queda con `academy_id NULL` — `teacher_id` apunta a un profesor ya borrado (huérfano de antes de mi fix de cascada), dato muerto sin importancia, no limpiado.
+
+## FIX TRANSCRIPCIONES → CHAT EQUIVOCADO — 2026-09-05  ✅ ARREGLADO Y DESPLEGADO
+Causa: `services/gmail.js` hacía matching de alumno por substring bidireccional (`.includes()`) sobre el nombre que adivinaba la IA — cualquier nombre corto que solapara con otro (ej. "Ana" dentro de "Ana María") podía robar la transcripción de otro alumno; con rol admin el pool era toda la academia. Arreglado: señal primaria ahora es la sesión reservada en `available_slots` (teacher_id + hora del email, ventana de 6h) que da el `student_id` exacto sin adivinar nada; fallback a coincidencia de nombre EXACTA (no substring) solo si no hay slot. Verificado: smoke 63/65, gmail-resilience 7/7.
 
 - [ ] Edu: recargar saldo en la cuenta de **DeepSeek** (no Groq — `services/groq.js` es solo el nombre heredado del fichero, el cliente real es DeepSeek). Confirmado 2026-09-05 vía API real (`railway run` + `/user/balance`): `total_balance: -0.03 USD`, `is_available: false`.
 - [ ] Tras recarga: verificar que el backlog del profesor 17 se drena y que el tutor IA vuelve a responder.
