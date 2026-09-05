@@ -326,6 +326,11 @@ ${transcriptForAI}`;
                    VALUES ($1, $2, $3, $4, FALSE, NOW())`
                 : `INSERT INTO messages (room_id, sender_id, content, academy_id, read, created_at)
                    VALUES ($1, $2, $3, $4, 0, datetime('now'))`;
+            const insertHtmlMsgSql = isPostgres
+                ? `INSERT INTO messages (room_id, sender_id, content, academy_id, read, type, created_at)
+                   VALUES ($1, $2, $3, $4, FALSE, $5, NOW())`
+                : `INSERT INTO messages (room_id, sender_id, content, academy_id, read, type, created_at)
+                   VALUES ($1, $2, $3, $4, 0, $5, datetime('now'))`;
 
             const transactionResult = await db.withTransaction(async tx => {
                 const existingRooms = await tx.query(sqlFindRoom, [sender_id, studentUserId, academy_id]);
@@ -364,7 +369,7 @@ ${transcriptForAI}`;
                 let promptHtml = null;
                 if (reminder) {
                     promptHtml = buildHomeworkReminderPrompt(reminder.id, reminder.homeworkList);
-                    await tx.query(insertMsgSql, [roomId, sender_id, promptHtml, academy_id]);
+                    await tx.query(insertHtmlMsgSql, [roomId, sender_id, promptHtml, academy_id, 'html_card']);
                 }
 
                 return { roomId, promptHtml };
@@ -389,6 +394,7 @@ ${transcriptForAI}`;
                     sender_id: sender_id,
                     sender_name: senderRows[0]?.name || 'Profesor',
                     content: promptHtml,
+                    type: 'html_card',
                     created_at: new Date().toISOString()
                 });
             }

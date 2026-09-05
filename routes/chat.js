@@ -148,7 +148,7 @@ module.exports = function makeChatRouter(io) {
 
             const sql = isPostgres
                 ? `SELECT m.id, m.room_id, m.sender_id, m.content,
-                  m.file_url, m.file_name, m.created_at, m.read,
+                  m.file_url, m.file_name, m.created_at, m.read, m.type,
                   u.name as sender_name
            FROM messages m
            LEFT JOIN users u ON u.id = m.sender_id
@@ -156,7 +156,7 @@ module.exports = function makeChatRouter(io) {
            ORDER BY m.created_at ASC
            LIMIT 100`
                 : `SELECT m.id, m.room_id, m.sender_id, m.content,
-                  m.file_url, m.file_name, m.created_at, m.read,
+                  m.file_url, m.file_name, m.created_at, m.read, m.type,
                   u.name as sender_name
            FROM messages m
            LEFT JOIN users u ON u.id = m.sender_id
