@@ -71,7 +71,7 @@ Causa raíz (logs Railway `web`): bucle de reproceso agota los 100k tokens/día 
 
 ## INCIDENTE — 2026-09-05  [BLOQUEANTE, requiere acción de Edu]
 DeepSeek sin saldo: `402 Insufficient Balance` desde 2026-09-03 ~14:00 (logs Railway, servicio `web`). Bloquea transcripciones (profesor 17, 5 pendientes y creciendo) y probablemente el tutor IA de toda la academia. La alerta de stall (`alertAdmins` en `services/gmail.js`) SÍ está avisando in-app a los admins, 1x/día/profesor.
-- [ ] Edu: recargar saldo en la cuenta de **DeepSeek** (no Groq — `services/groq.js` es solo el nombre heredado del fichero, el cliente real es DeepSeek).
+- [ ] Edu: recargar saldo en la cuenta de **DeepSeek** (no Groq — `services/groq.js` es solo el nombre heredado del fichero, el cliente real es DeepSeek). Confirmado 2026-09-05 vía API real (`railway run` + `/user/balance`): `total_balance: -0.03 USD`, `is_available: false`.
 - [ ] Tras recarga: verificar que el backlog del profesor 17 se drena y que el tutor IA vuelve a responder.
 Verif: 65/65 smoke · homework-reminders OK · 4/4 gmail-resilience.
 
