@@ -443,35 +443,71 @@ router.delete('/api/auth/delete-account', authenticateJWT, async (req, res, next
         console.log('Deleting account:', userId, userRole, academyId);
 
         if (userRole === 'admin' && academyId) {
-            // Delete all academy data with proper cascade via subqueries
-            try { await db.query('DELETE FROM messages WHERE room_id IN (SELECT id FROM rooms WHERE academy_id = $1)', [academyId]); } catch (e) { console.log('Skip messages:', e.message); }
-            try { await db.query('DELETE FROM room_members WHERE room_id IN (SELECT id FROM rooms WHERE academy_id = $1)', [academyId]); } catch (e) { console.log('Skip room_members:', e.message); }
-            try { await db.query('DELETE FROM rooms WHERE academy_id = $1', [academyId]); } catch (e) { console.log('Skip rooms:', e.message); }
-            try { await db.query('DELETE FROM payments WHERE student_id IN (SELECT id FROM students WHERE academy_id = $1)', [academyId]); } catch (e) { console.log('Skip payments:', e.message); }
-            try { await db.query('DELETE FROM exams WHERE student_id IN (SELECT id FROM students WHERE academy_id = $1)', [academyId]); } catch (e) { console.log('Skip exams:', e.message); }
-            try { await db.query('DELETE FROM sessions WHERE student_id IN (SELECT id FROM students WHERE academy_id = $1)', [academyId]); } catch (e) { console.log('Skip sessions:', e.message); }
-            try { await db.query('DELETE FROM students WHERE academy_id = $1', [academyId]); } catch (e) { console.log('Skip students:', e.message); }
-            try { await db.query('DELETE FROM users WHERE academy_id = $1', [academyId]); } catch (e) { console.log('Skip users:', e.message); }
-            // Delete academy
-            try {
-                await db.query('DELETE FROM academies WHERE id = $1', [academyId]);
-            } catch (e) {
-                console.log('Skip academy:', e.message);
-            }
+            await db.withTransaction(async tx => {
+                const academyUsers = '(SELECT id FROM users WHERE academy_id = $1)';
+                const academyStudents = '(SELECT id FROM students WHERE academy_id = $1)';
+                const deletes = [
+                    `DELETE FROM ai_messages WHERE conversation_id IN (SELECT id FROM ai_conversations WHERE academy_id = $1 OR user_id IN ${academyUsers})`,
+                    `DELETE FROM messages WHERE academy_id = $1 OR room_id IN (SELECT id FROM rooms WHERE academy_id = $1)`,
+                    `DELETE FROM room_members WHERE user_id IN ${academyUsers} OR room_id IN (SELECT id FROM rooms WHERE academy_id = $1)`,
+                    `DELETE FROM homework_reminders WHERE academy_id = $1 OR student_id IN ${academyStudents} OR teacher_id IN ${academyUsers}`,
+                    `DELETE FROM notifications WHERE academy_id = $1 OR user_id IN ${academyUsers}`,
+                    `DELETE FROM simulator_results WHERE student_id IN ${academyStudents}`,
+                    `DELETE FROM sent_reports WHERE academy_id = $1 OR student_id IN ${academyStudents}`,
+                    `DELETE FROM reports WHERE academy_id = $1 OR student_id IN ${academyStudents}`,
+                    `DELETE FROM payments WHERE student_id IN ${academyStudents}`,
+                    `DELETE FROM exams WHERE student_id IN ${academyStudents}`,
+                    `DELETE FROM sessions WHERE student_id IN ${academyStudents}`,
+                    `DELETE FROM available_slots WHERE academy_id = $1 OR student_id IN ${academyStudents} OR teacher_id IN ${academyUsers}`,
+                    `DELETE FROM recurring_sessions WHERE academy_id = $1 OR student_id IN ${academyStudents} OR teacher_id IN ${academyUsers}`,
+                    `DELETE FROM student_links WHERE academy_id = $1 OR student_id IN ${academyStudents}`,
+                    `DELETE FROM teacher_payments WHERE academy_id = $1 OR teacher_id IN ${academyUsers}`,
+                    `DELETE FROM invitation_links WHERE academy_id = $1 OR created_by IN ${academyUsers}`,
+                    `DELETE FROM transcripts WHERE academy_id = $1 OR student_id IN ${academyStudents} OR teacher_id IN ${academyUsers}`,
+                    `DELETE FROM ai_conversations WHERE academy_id = $1 OR user_id IN ${academyUsers}`,
+                    'DELETE FROM settings WHERE academy_id = $1',
+                    'DELETE FROM rooms WHERE academy_id = $1',
+                    'DELETE FROM students WHERE academy_id = $1',
+                    'DELETE FROM users WHERE academy_id = $1',
+                    'DELETE FROM academies WHERE id = $1'
+                ];
+                for (const sql of deletes) await tx.query(sql, [academyId]);
+            });
         } else {
-            // Just delete this user
-            try {
-                await db.query('DELETE FROM students WHERE user_id = $1', [userId]);
-            } catch (e) {
-                console.log('Skip student record:', e.message);
-            }
-            await db.query('DELETE FROM users WHERE id = $1', [userId]);
+            await db.withTransaction(async tx => {
+                const userStudents = '(SELECT id FROM students WHERE user_id = $1)';
+                const userConversations = '(SELECT id FROM ai_conversations WHERE user_id = $1)';
+                const deletes = [
+                    `DELETE FROM ai_messages WHERE conversation_id IN ${userConversations}`,
+                    'DELETE FROM messages WHERE sender_id = $1',
+                    'DELETE FROM room_members WHERE user_id = $1',
+                    'DELETE FROM notifications WHERE user_id = $1',
+                    `DELETE FROM homework_reminders WHERE student_id IN ${userStudents} OR teacher_id = $1`,
+                    `DELETE FROM simulator_results WHERE student_id IN ${userStudents}`,
+                    `DELETE FROM sent_reports WHERE student_id IN ${userStudents}`,
+                    `DELETE FROM reports WHERE student_id IN ${userStudents}`,
+                    `DELETE FROM payments WHERE student_id IN ${userStudents}`,
+                    `DELETE FROM exams WHERE student_id IN ${userStudents}`,
+                    `DELETE FROM sessions WHERE student_id IN ${userStudents}`,
+                    `DELETE FROM available_slots WHERE student_id IN ${userStudents} OR teacher_id = $1`,
+                    `DELETE FROM recurring_sessions WHERE student_id IN ${userStudents} OR teacher_id = $1`,
+                    `DELETE FROM student_links WHERE student_id IN ${userStudents}`,
+                    'DELETE FROM teacher_payments WHERE teacher_id = $1',
+                    'DELETE FROM invitation_links WHERE created_by = $1',
+                    `DELETE FROM transcripts WHERE student_id IN ${userStudents} OR teacher_id = $1`,
+                    'DELETE FROM ai_conversations WHERE user_id = $1',
+                    'UPDATE students SET assigned_teacher_id = NULL WHERE assigned_teacher_id = $1',
+                    'DELETE FROM students WHERE user_id = $1',
+                    'DELETE FROM users WHERE id = $1'
+                ];
+                for (const sql of deletes) await tx.query(sql, [userId]);
+            });
         }
 
         res.json({ success: true });
     } catch (err) {
         console.error('Delete error:', err.message);
-        res.status(500).json({ error: 'Error al eliminar la cuenta' });
+        res.status(500).json({ error: 'No se pudo eliminar la cuenta. Inténtalo de nuevo o contacta con soporte.' });
     }
 });
 
