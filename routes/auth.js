@@ -461,7 +461,7 @@ router.delete('/api/auth/delete-account', authenticateJWT, async (req, res, next
                     `DELETE FROM available_slots WHERE academy_id = $1 OR student_id IN ${academyStudents} OR teacher_id IN ${academyUsers}`,
                     `DELETE FROM recurring_sessions WHERE academy_id = $1 OR student_id IN ${academyStudents} OR teacher_id IN ${academyUsers}`,
                     `DELETE FROM student_links WHERE academy_id = $1 OR student_id IN ${academyStudents}`,
-                    `DELETE FROM teacher_payments WHERE academy_id = $1 OR teacher_id IN ${academyUsers}`,
+                    `DELETE FROM teacher_payments WHERE teacher_id IN ${academyUsers}`,
                     `DELETE FROM invitation_links WHERE academy_id = $1 OR created_by IN ${academyUsers}`,
                     `DELETE FROM transcripts WHERE academy_id = $1 OR student_id IN ${academyStudents} OR teacher_id IN ${academyUsers}`,
                     `DELETE FROM ai_conversations WHERE academy_id = $1 OR user_id IN ${academyUsers}`,
