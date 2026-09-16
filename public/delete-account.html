@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Eliminar una cuenta — AcademiaPro</title>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600&amp;family=DM+Sans:wght@400;500&amp;display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; background: #f8f7f4; color: #374151; font: 15px/1.7 'DM Sans', sans-serif; }
+    nav { height: 60px; padding: 0 48px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e2e0d8; }
+    nav a { color: #64748b; text-decoration: none; }
+    .logo { color: #0f172a; font: 600 1.1rem 'Fraunces', Georgia, serif; }
+    .logo span, main a { color: #2563eb; }
+    main { max-width: 760px; margin: 0 auto; padding: 64px 48px 96px; }
+    h1, h2 { color: #0f172a; font-family: 'Fraunces', Georgia, serif; }
+    h1 { margin: 0 0 12px; font-size: clamp(1.8rem, 4vw, 2.5rem); }
+    h2 { margin: 36px 0 10px; font-size: 1.15rem; }
+    p, li { margin-bottom: 10px; }
+    ol, ul { padding-left: 24px; }
+    .meta { color: #64748b; padding-bottom: 28px; border-bottom: 1px solid #e2e0d8; }
+    .notice { margin: 24px 0; padding: 18px 22px; background: #fff; border: 1px solid #e2e0d8; border-radius: 12px; }
+    footer { max-width: 760px; margin: 0 auto; padding: 24px 48px; border-top: 1px solid #e2e0d8; display: flex; gap: 20px; }
+    footer a { color: #64748b; text-decoration: none; }
+    @media (max-width: 640px) { nav { padding: 0 20px; } main, footer { padding-left: 24px; padding-right: 24px; } }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="/" class="logo">Academia<span>Pro</span></a>
+    <a href="/">← Volver al inicio</a>
+  </nav>
+
+  <main>
+    <h1>Eliminar una cuenta</h1>
+    <p class="meta">Instrucciones públicas de eliminación de cuentas y datos de AcademiaPro</p>
+
+    <div class="notice">
+      La eliminación es irreversible. Si eres administrador de una academia, eliminar tu cuenta elimina también la academia, sus usuarios y sus datos locales asociados.
+    </div>
+
+    <h2>Desde la aplicación</h2>
+    <ol>
+      <li>Inicia sesión en AcademiaPro.</li>
+      <li>Si eres administrador, abre <strong>Configuración</strong>; si eres profesor, abre <strong>Mi Configuración</strong>; si eres alumno, permanece en tu portal.</li>
+      <li>Busca la sección <strong>Zona de peligro</strong> y pulsa <strong>Eliminar mi cuenta</strong>.</li>
+      <li>Confirma la acción pulsando de nuevo el botón.</li>
+    </ol>
+
+    <h2>Si no puedes iniciar sesión</h2>
+    <p>Escribe desde el correo asociado a tu cuenta a <a href="mailto:hola@academiapro.academy?subject=Solicitud%20de%20eliminaci%C3%B3n%20de%20cuenta">hola@academiapro.academy</a> con el asunto “Solicitud de eliminación de cuenta”. Indica tu rol y la academia a la que perteneces. Podremos pedirte información adicional para verificar que la cuenta es tuya antes de tramitar la solicitud.</p>
+    <p>Esta página no incluye un formulario ni recibe datos personales directamente. La solicitud se envía mediante tu proveedor de correo.</p>
+
+    <h2>Qué elimina AcademiaPro</h2>
+    <ul>
+      <li>La cuenta, el perfil y las credenciales locales.</li>
+      <li>Los datos académicos directamente asociados, como sesiones, exámenes, calificaciones, deberes, informes y registros internos de pagos.</li>
+      <li>Mensajes enviados, notificaciones, conversaciones de IA y transcripciones asociadas según el rol de la cuenta.</li>
+      <li>Los tokens locales de Google Calendar y Gmail. AcademiaPro intenta además revocar los permisos en Google antes de borrar la cuenta.</li>
+    </ul>
+
+    <h2>Límites del borrado</h2>
+    <p>La ruta de eliminación borra los registros asociados de la base de datos. No puede garantizar la eliminación inmediata de archivos adjuntos que permanezcan en el almacenamiento, información que ya esté en sistemas de Google, DeepSeek, Resend, Sentry u otros proveedores, ni copias realizadas por otros usuarios. Si la revocación automática de Google falla, puedes retirar el acceso de AcademiaPro desde la configuración de seguridad de tu cuenta de Google.</p>
+    <p>No se promete un plazo de conservación adicional que no esté confirmado. Consulta la <a href="/privacy.html">Política de Privacidad</a> para conocer el tratamiento completo.</p>
+  </main>
+
+  <footer>
+    <a href="/privacy.html">Privacidad</a>
+    <a href="/terms.html">Términos</a>
+    <a href="mailto:hola@academiapro.academy">Contacto</a>
+  </footer>
+</body>
+</html>
