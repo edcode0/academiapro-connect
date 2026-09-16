@@ -45,7 +45,8 @@ const chatUpload = multer({
     }),
     limits:     { fileSize: 10 * 1024 * 1024 },
     fileFilter: (req, file, cb) => {
-        if (ALLOWED_CHAT_MIMES.has(file.mimetype)) cb(null, true);
+        const ext = path.extname(file.originalname).toLowerCase();
+        if (ALLOWED_CHAT_EXTS.has(ext) && ALLOWED_CHAT_MIMES.has(file.mimetype)) cb(null, true);
         else cb(new Error('Tipo de archivo no permitido'));
     }
 }).single('file');

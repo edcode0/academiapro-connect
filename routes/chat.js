@@ -174,7 +174,7 @@ module.exports = function makeChatRouter(io) {
         }
     });
 
-    router.get('/api/chat/contacts', authenticateJWT, async (req, res, next) => {
+    router.get('/api/chat/contacts', authenticateJWT, requireAdmin, async (req, res, next) => {
         try {
             const result = await db.query(
                 'SELECT id, name, role FROM users WHERE academy_id = $1 AND id != $2 ORDER BY role, name',

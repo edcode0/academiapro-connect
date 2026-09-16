@@ -97,8 +97,14 @@ router.get('/api/admin/unassigned-count', authenticateJWT, requireAdmin, (req, r
 
 router.post('/api/admin/add-user-by-code', authenticateJWT, requireAdmin, async (req, res, next) => {
     const { code, role } = req.body;
+    if (!['teacher', 'student'].includes(role)) {
+        return res.status(400).json({ error: 'Rol no válido' });
+    }
     try {
-        let result = await db.query('SELECT * FROM users WHERE user_code = $1', [code]);
+        // Only claim users not already tied to an academy — otherwise a brute-forced
+        // 5-digit code (90k combinations) lets any admin hijack any existing user in
+        // the system into their own academy with a role of their choosing.
+        let result = await db.query('SELECT * FROM users WHERE user_code = $1 AND academy_id IS NULL', [code]);
         const user = result?.rows && result.rows.length ? result.rows[0] : null;
         if (!user) return res.status(404).json({ error: 'Código no encontrado' });
 

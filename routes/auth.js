@@ -39,28 +39,23 @@ router.post('/auth/register', async (req, res, next) => {
 
             const role = academy_code === acad.teacher_code ? 'teacher' : 'student';
 
-            // Check if user already exists
-            const userRes = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+            // Check if user already exists — never move/reassign an existing account without
+            // proving the password; that would let anyone who knows a victim's email plus a
+            // join code silently hijack their account into a different academy/role.
+            const userRes = await db.query('SELECT id FROM users WHERE email = $1', [email]);
             const existingUser = userRes?.rows ? userRes.rows[0] : (userRes || [])[0];
+            if (existingUser) {
+                return res.status(400).json({ error: 'Este email ya está registrado. Por favor inicia sesión.' });
+            }
 
             let userId;
-
-            if (existingUser) {
-                if (existingUser.academy_id === acad.id) {
-                    return res.status(400).json({ error: 'Este email ya está registrado en esta academia' });
+            try {
+                userId = await db.insertReturning('INSERT INTO users (name, email, password_hash, role, academy_id, user_code) VALUES ($1, $2, $3, $4, $5, $6)', [name, email, hash, role, acad.id, userCode]);
+            } catch (err) {
+                if (err.message.includes('UNIQUE constraint failed') || err.message.includes('duplicate key value')) {
+                    return res.status(400).json({ error: 'Este email ya está registrado. Por favor inicia sesión.' });
                 }
-                // Update to new academy
-                await db.query('UPDATE users SET academy_id = $1, role = $2 WHERE id = $3', [acad.id, role, existingUser.id]);
-                userId = existingUser.id;
-            } else {
-                try {
-                    userId = await db.insertReturning('INSERT INTO users (name, email, password_hash, role, academy_id, user_code) VALUES ($1, $2, $3, $4, $5, $6)', [name, email, hash, role, acad.id, userCode]);
-                } catch (err) {
-                    if (err.message.includes('UNIQUE constraint failed') || err.message.includes('duplicate key value')) {
-                        return res.status(400).json({ error: 'Este email ya está registrado. Por favor inicia sesión.' });
-                    }
-                    throw err;
-                }
+                throw err;
             }
 
             if (role === 'student') {

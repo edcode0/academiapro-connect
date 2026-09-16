@@ -287,10 +287,13 @@ router.post('/api/exams/student', authenticateJWT, (req, res, next) => {
 router.put('/api/exams/:id/score', authenticateJWT, requireTeacherOrAdmin, async (req, res, next) => {
     try {
         const { score } = req.body;
+        const isTeacher = req.user.role === 'teacher';
+        const params = [score, req.params.id, req.user.academy_id];
+        if (isTeacher) params.push(req.user.id);
         const result = await db.query(
             `UPDATE exams SET score = $1
-             WHERE id = $2 AND student_id IN (SELECT id FROM students WHERE academy_id = $3)`,
-            [score, req.params.id, req.user.academy_id]
+             WHERE id = $2 AND student_id IN (SELECT id FROM students WHERE academy_id = $3${isTeacher ? ' AND assigned_teacher_id = $4' : ''})`,
+            params
         );
         if ((result.rowCount ?? result.changes ?? 0) === 0) return res.status(404).json({ error: 'Examen no encontrado' });
 
@@ -307,10 +310,13 @@ router.put('/api/exams/:id/score', authenticateJWT, requireTeacherOrAdmin, async
 router.post('/api/exams', authenticateJWT, requireTeacherOrAdmin, async (req, res, next) => {
     try {
         const { student_id, subject, score, date, notes } = req.body;
-        // Verify student belongs to the same academy before inserting
+        // Verify student belongs to the same academy (and, for a teacher, to them) before inserting
+        const isTeacher = req.user.role === 'teacher';
+        const ownerParams = [student_id, req.user.academy_id];
+        if (isTeacher) ownerParams.push(req.user.id);
         const ownerCheck = await db.query(
-            'SELECT id FROM students WHERE id = $1 AND academy_id = $2',
-            [student_id, req.user.academy_id]
+            `SELECT id FROM students WHERE id = $1 AND academy_id = $2${isTeacher ? ' AND assigned_teacher_id = $3' : ''}`,
+            ownerParams
         );
         if (!(ownerCheck.rows?.[0] ?? ownerCheck[0])) {
             return res.status(403).json({ error: 'Estudiante no pertenece a esta academia' });
@@ -328,10 +334,13 @@ router.post('/api/exams', authenticateJWT, requireTeacherOrAdmin, async (req, re
 router.put('/api/exams/:id', authenticateJWT, requireTeacherOrAdmin, async (req, res, next) => {
     try {
         const { subject, score, date, notes } = req.body;
+        const isTeacher = req.user.role === 'teacher';
+        const params = [subject, score, date, notes, req.params.id, req.user.academy_id];
+        if (isTeacher) params.push(req.user.id);
         const result = await db.query(
             `UPDATE exams SET subject=$1, score=$2, date=$3, notes=$4
-             WHERE id=$5 AND student_id IN (SELECT id FROM students WHERE academy_id=$6) RETURNING *`,
-            [subject, score, date, notes, req.params.id, req.user.academy_id]
+             WHERE id=$5 AND student_id IN (SELECT id FROM students WHERE academy_id=$6${isTeacher ? ' AND assigned_teacher_id=$7' : ''}) RETURNING *`,
+            params
         );
         res.json(result.rows[0] || { updated: 0 });
     } catch (err) {
@@ -341,9 +350,12 @@ router.put('/api/exams/:id', authenticateJWT, requireTeacherOrAdmin, async (req,
 
 router.delete('/api/exams/:id', authenticateJWT, requireTeacherOrAdmin, async (req, res, next) => {
     try {
+        const isTeacher = req.user.role === 'teacher';
+        const params = [req.params.id, req.user.academy_id];
+        if (isTeacher) params.push(req.user.id);
         await db.query(
-            'DELETE FROM exams WHERE id=$1 AND student_id IN (SELECT id FROM students WHERE academy_id=$2)',
-            [req.params.id, req.user.academy_id]
+            `DELETE FROM exams WHERE id=$1 AND student_id IN (SELECT id FROM students WHERE academy_id=$2${isTeacher ? ' AND assigned_teacher_id=$3' : ''})`,
+            params
         );
         res.json({ success: true });
     } catch (err) {

@@ -218,6 +218,31 @@ passport.deserializeUser((user, done) => done(null, user));
 const JWT_SECRET = process.env.JWT_SECRET;
 const { authenticateJWT } = require('./middleware/auth');
 
+// Authenticated file serving for uploads — registered BEFORE the blanket
+// express.static(public) mount below, so it always intercepts /uploads/*
+// first. (A previous version relied on a static-middleware setHeaders hook
+// to reject /uploads/* with 403 after the fact; that hook could call
+// res.end() after send() had already started writing headers, throwing
+// ERR_HTTP_HEADERS_SENT as an uncaught exception and crashing the process.)
+app.get('/uploads/:folder/:filename', (req, res, next) => {
+    // Return JSON 401 (not a redirect) so API clients handle it correctly
+    const token = req.cookies?.token ||
+        (req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.split(' ')[1] : null);
+    if (!token) return res.status(401).json({ error: 'Unauthorized' });
+    next();
+}, authenticateJWT, (req, res) => {
+    const { folder, filename } = req.params;
+    // Only allow known upload folders
+    if (!['chat', 'reports'].includes(folder)) return res.status(404).end();
+
+    // Prevent path traversal
+    const safeName = path.basename(filename);
+    const filePath = path.join(__dirname, 'public', 'uploads', folder, safeName);
+
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Archivo no encontrado' });
+    res.sendFile(filePath);
+});
+
 const requireRole = (role) => (req, res, next) => {
     if (req.user && req.user.role === role) next();
     else res.status(403).send('Forbidden');
@@ -340,36 +365,11 @@ app.get('/dashboard', (req, res) => res.redirect('/'));
 
 
 // Add express static for other files (must be AFTER root and routes)
-// Serve everything EXCEPT /uploads (which is protected below)
+// /uploads is NOT served from here — the authenticated route above intercepts
+// it first (registered earlier in this file, before this catch-all mount).
 app.use(express.static(path.join(__dirname, 'public'), {
-    index: false,
-    // Block direct access to uploads — handled by the authenticated route below
-    setHeaders: (res, filePath) => {
-        if (filePath.includes(path.sep + 'uploads' + path.sep)) {
-            res.status(403).end();
-        }
-    }
+    index: false
 }));
-
-// Authenticated file serving for uploads
-app.get('/uploads/:folder/:filename', (req, res, next) => {
-    // Return JSON 401 (not a redirect) so API clients handle it correctly
-    const token = req.cookies?.token ||
-        (req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.split(' ')[1] : null);
-    if (!token) return res.status(401).json({ error: 'Unauthorized' });
-    next();
-}, authenticateJWT, (req, res) => {
-    const { folder, filename } = req.params;
-    // Only allow known upload folders
-    if (!['chat', 'reports'].includes(folder)) return res.status(404).end();
-
-    // Prevent path traversal
-    const safeName = path.basename(filename);
-    const filePath = path.join(__dirname, 'public', 'uploads', folder, safeName);
-
-    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Archivo no encontrado' });
-    res.sendFile(filePath);
-});
 
 
 
