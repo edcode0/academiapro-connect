@@ -1,6 +1,6 @@
 # Google Play release readiness
 
-Baseline frozen on 2026-09-16 from branch `codex/google-play-readiness` at `29d28b2c6d53`; updated through Tasks 2–4 on the same branch.
+Baseline frozen on 2026-09-16 from branch `codex/google-play-readiness` at `29d28b2c6d53`; updated through Task 5 on the same branch.
 
 ## Status
 
@@ -128,7 +128,33 @@ Until an artifact is supplied, its status is **not started or not delivered**, a
 
 No project ID, console export, local `.env`, or configured `gcloud` client was available. The OAuth brand, audience, authorized domains, clients, callbacks, approved scopes, verification status, contacts, and user cap could not be checked.
 
-The Gmail scope requested by the code is restricted. Because Gmail-derived data is stored and transmitted by the server, restricted-scope verification and a security assessment may apply: <https://developers.google.com/workspace/gmail/api/auth/scopes> and <https://support.google.com/cloud/answer/13464321?hl=en>.
+The Gmail scope requested by the code is restricted. Because Gmail-derived data is stored and transmitted by the server, restricted-scope verification and a security assessment are required by Google's current Gmail scope guidance: <https://developers.google.com/workspace/gmail/api/auth/scopes> and <https://support.google.com/cloud/answer/13464321?hl=en>.
+
+## Task 5 OAuth audit and Calendar scope decision
+
+No Google Cloud or Search Console configuration was available for inspection. Project ID, production/staging separation, audience, verified domain, enabled APIs, web/Android clients, registered redirects, branding, Data Access declarations, user cap, and verification status remain unknown.
+
+Current scope classification and open decisions:
+
+- `profile` + `email`: basic identity/non-sensitive, isolated to login.
+- `calendar.events`: sensitive and still requested by the code. Although all current operations use `calendarId: 'primary'`, the least-privilege decision remains pending until `calendar.events.owned` passes real personal and Workspace tests and there is an explicit revocation/reauthorization migration for existing grants. Do not change the declared scope before both conditions are met.
+- `gmail.readonly`: restricted and the minimum scope that can read the message body; `gmail.metadata` is insufficient. Server storage of up to 5,000 raw characters plus derived data and transmission of up to 8,000 characters plus student names to DeepSeek trigger the restricted-data assessment path.
+
+Submission must also wait for these local/public gaps:
+
+- the corrected privacy/terms/deletion pages are not deployed; live privacy and terms are stale and deletion returns `404`;
+- live support returns `404` and `hola@academiapro.academy` has not passed a receive/reply test;
+- the public privacy policy and Gmail connection UI now include the Google Limited Use statement and the pre-authorization DeepSeek disclosure; deploy and verify both before submission;
+- no Android artifact, package proof, signing SHA-1, Android OAuth client, or return mechanism exists;
+- Calendar/Gmail disconnect controls are now present in the two settings pages; verify them on the deployed build before submission.
+
+The exact production web redirects implied by the code are:
+
+- `https://academiapro.academy/auth/google/callback`
+- `https://academiapro.academy/api/calendar/callback`
+- `https://academiapro.academy/api/gmail/callback`
+
+Do not invent an Android redirect or create its OAuth client until Task 6 supplies the wrapper, `applicationId=academy.academiapro.app`, signing fingerprints, and external-user-agent return design. Full findings, justifications, blocker order, and the reviewer-video checklist are in `.superpowers/sdd/2026-09-16-academiapro-google-play-launch/task-5-report.md`.
 
 ### Play Console
 
@@ -154,11 +180,11 @@ No credential values were copied into this document.
 | P0 | Google Cloud OAuth project not identified | supply project access or a secret-free export of brand, audience, clients, redirects, scopes, and verification |
 | P0 | Play Console configuration/build not verified | supply secret-free evidence for package `academy.academiapro.app`, app content, signing, and release artifact |
 | P0 | Account-deletion page not deployed | deploy `public/delete-account.html`, verify `https://academiapro.academy/delete-account.html`, and register it in Play Console |
-| P0 | Restricted Gmail scopes with server storage/transmission | confirm verification/security-assessment path or reduce/redesign access |
-| P0 | Landing page claims Stripe and fixed plans/prices that are not implemented or approved | remove/qualify the out-of-scope landing copy and keep Android v1 free of digital purchases/Stripe links |
-| P1 | Final minimized scopes not aligned with Google Cloud | configure exactly `profile`, `email`, `calendar.events`, and `gmail.readonly` in the relevant clients/consent screen |
+| P0 | Restricted Gmail scope with server storage/transmission | complete restricted-scope verification and the required assessment path, or remove/redesign Gmail access |
+| P0 | Landing page claims Stripe and fixed plans/prices that are not implemented or approved | deploy the qualified landing copy and keep Android v1 free of digital purchases/Stripe links |
+| P1 | Final minimized scopes not aligned with Google Cloud | after the Calendar compatibility test and migration decision, configure only the scopes actually requested by login, Calendar, and Gmail |
 | P1 | Public support page missing and mailbox delivery unverified | publish branded HTTPS support and complete a controlled receive/reply test for `hola@academiapro.academy` |
-| P1 | OAuth disconnect controls absent from settings UI | expose the existing authenticated disconnect routes or retain a tested support process |
+| P1 | OAuth disconnect controls not yet verified in deployment | exercise both controls on the deployed build and confirm local cleanup plus Google revocation |
 | P1 | Uploaded-file deletion not implemented/proven | define and test removal of account-owned attachments from persistent storage before making a broader deletion claim |
 | P2 | Deployment documentation still refers to Groq | align it with the actual DeepSeek configuration |
 

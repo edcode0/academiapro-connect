@@ -784,7 +784,6 @@
     <span class="logo-name">Gmail</span>
     <span class="logo-name">Google Calendar</span>
     <span class="logo-name">Drive</span>
-    <span class="logo-name">Stripe</span>
   </div>
 </div>
 
@@ -866,12 +865,12 @@
   <div class="pricing-wrap">
     <div class="pricing-header">
       <div class="section-eyebrow">Precios</div>
-      <h2 class="section-h2">Simple, sin sorpresas</h2>
-      <p class="pricing-subtext">Empieza gratis. Escala cuando lo necesites.</p>
+      <h2 class="section-h2">Planes adaptados a tu academia</h2>
+      <p class="pricing-subtext">Estamos terminando de definir los límites, funciones y precios de cada plan.</p>
     </div>
 
     <!-- Billing toggle -->
-    <div class="billing-toggle">
+    <div class="billing-toggle" style="display:none">
       <span class="toggle-label active" id="lbl-monthly">Mensual</span>
       <button class="toggle-pill" id="billing-toggle" onclick="toggleBilling()" aria-label="Cambiar ciclo de facturación">
         <div class="toggle-thumb"></div>
@@ -880,7 +879,8 @@
       <span class="save-badge">Ahorra 20%</span>
     </div>
 
-    <div class="plans-grid">
+    <p class="pricing-subtext" style="max-width:46rem;margin:2rem auto 0;text-align:center;">La versión actual se puede probar gratis. Publicaremos los planes y sus condiciones antes de activar cualquier suscripción o cobro.</p>
+    <div class="plans-grid" style="display:none">
 
       <!-- Free -->
       <div class="plan-card">
@@ -944,7 +944,7 @@
       </div>
 
     </div>
-    <p class="pricing-note">Sin permanencia · Cancela cuando quieras · IVA no incluido</p>
+    <p class="pricing-note">Sin suscripciones activas ni cobros automáticos en este momento.</p>
   </div>
 </section>
 
