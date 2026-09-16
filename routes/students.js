@@ -13,13 +13,14 @@ router.delete('/api/admin/students/:id', authenticateJWT, requireAdmin, (req, re
         const student = row?.rows[0];
         if (!student) return res.status(404).json({ error: 'Student not found' });
 
-        db.query('DELETE FROM sessions WHERE student_id = $1', [req.params.id]);
-        db.query('DELETE FROM exams WHERE student_id = $1', [req.params.id]);
-        db.query('DELETE FROM payments WHERE student_id = $1', [req.params.id]);
+        db.query('DELETE FROM sessions WHERE student_id = $1', [req.params.id], e => e && console.error('[DELETE student] sessions cascade failed:', e.message));
+        db.query('DELETE FROM exams WHERE student_id = $1', [req.params.id], e => e && console.error('[DELETE student] exams cascade failed:', e.message));
+        db.query('DELETE FROM payments WHERE student_id = $1', [req.params.id], e => e && console.error('[DELETE student] payments cascade failed:', e.message));
 
-        db.query('DELETE FROM students WHERE id = $1', [req.params.id], () => {
+        db.query('DELETE FROM students WHERE id = $1', [req.params.id], (delErr) => {
+            if (delErr) return next(delErr);
             if (student.user_id) {
-                db.query('UPDATE users SET academy_id = NULL WHERE id = $1', [student.user_id]);
+                db.query('UPDATE users SET academy_id = NULL WHERE id = $1', [student.user_id], e => e && console.error('[DELETE student] user unlink failed:', e.message));
             }
             res.json({ success: true });
         });

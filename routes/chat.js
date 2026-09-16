@@ -217,6 +217,7 @@ module.exports = function makeChatRouter(io) {
             WHERE rm.user_id = $1 AND m.sender_id != $2 AND m.read = FALSE AND m.academy_id = $3
         `;
         db.query(sql, [req.user.id, req.user.id, req.user.academy_id], (err, result) => {
+            if (err) return next(err);
             res.json({ count: result?.rows[0]?.count || 0 });
         });
     });

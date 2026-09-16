@@ -11,9 +11,12 @@ const { generateMonthlyPayments } = require('../services/billing');
 router.post('/api/payments', authenticateJWT, requireTeacherOrAdmin, async (req, res, next) => {
     try {
         const { student_id, amount, due_date, status, paid_date, notes } = req.body;
+        const isTeacher = req.user.role === 'teacher';
+        const checkParams = [student_id, req.user.academy_id];
+        if (isTeacher) checkParams.push(req.user.id);
         const studentCheck = await db.query(
-            'SELECT id FROM students WHERE id = $1 AND academy_id = $2',
-            [student_id, req.user.academy_id]
+            `SELECT id FROM students WHERE id = $1 AND academy_id = $2${isTeacher ? ' AND assigned_teacher_id = $3' : ''}`,
+            checkParams
         );
         if (!studentCheck.rows.length) return res.status(403).json({ error: 'El alumno no pertenece a tu academia' });
         const result = await db.query(
@@ -29,21 +32,29 @@ router.post('/api/payments', authenticateJWT, requireTeacherOrAdmin, async (req,
 });
 
 router.get('/api/payments', authenticateJWT, (req, res, next) => {
-    db.query('SELECT p.* FROM payments p JOIN students st ON p.student_id = st.id WHERE st.academy_id = $1', [req.user.academy_id], (err, result) => {
-        if (err) return next(err);
-        res.json(result.rows);
-    });
+    const isTeacher = req.user.role === 'teacher';
+    const params = [req.user.academy_id];
+    if (isTeacher) params.push(req.user.id);
+    db.query(
+        `SELECT p.* FROM payments p JOIN students st ON p.student_id = st.id WHERE st.academy_id = $1${isTeacher ? ' AND st.assigned_teacher_id = $2' : ''}`,
+        params, (err, result) => {
+            if (err) return next(err);
+            res.json(result.rows);
+        });
 });
 
 router.get('/api/payments-data', authenticateJWT, (req, res, next) => {
+    const isTeacher = req.user.role === 'teacher';
+    const params = [req.user.academy_id];
+    if (isTeacher) params.push(req.user.id);
     const sql = `
         SELECT p.*, s.name as student_name, s.monthly_fee as student_monthly_fee
         FROM payments p
         JOIN students s ON p.student_id = s.id
-        WHERE s.academy_id = $1
+        WHERE s.academy_id = $1${isTeacher ? ' AND s.assigned_teacher_id = $2' : ''}
         ORDER BY p.due_date DESC
     `;
-    db.query(sql, [req.user.academy_id], (err, result) => {
+    db.query(sql, params, (err, result) => {
         if (err) return next(err);
         const allPayments = result.rows;
         const now = new Date();
@@ -91,7 +102,14 @@ router.get('/api/teacher-payments', authenticateJWT, requireAdmin, (req, res, ne
         const teachers = tRes.rows || [];
 
         let processed = 0;
+        let failed = false;
         if (teachers.length === 0) return res.json([]);
+
+        const fail = (err) => {
+            if (failed) return; // next() must only run once even if several teachers error
+            failed = true;
+            next(err);
+        };
 
         teachers.forEach(teacher => {
             db.query(`SELECT
@@ -100,6 +118,7 @@ router.get('/api/teacher-payments', authenticateJWT, requireAdmin, (req, res, ne
                       FROM sessions s JOIN students st ON s.student_id = st.id
                       WHERE st.assigned_teacher_id = $1 AND s.date LIKE $2`,
                 [teacher.id, likePattern], (err, sRes) => {
+                    if (err) return fail(err);
                     const indivMinutes = sRes?.rows?.[0]?.indiv_ms ? parseFloat(sRes.rows[0].indiv_ms) : 0;
                     const groupMinutes = sRes?.rows?.[0]?.group_ms ? parseFloat(sRes.rows[0].group_ms) : 0;
                     const indivHours = indivMinutes / 60;
@@ -109,26 +128,32 @@ router.get('/api/teacher-payments', authenticateJWT, requireAdmin, (req, res, ne
 
                     db.query('SELECT id, paid FROM teacher_payments WHERE teacher_id = $1 AND academy_id = $2 AND month = $3 AND year = $4',
                         [teacher.id, acadId, month, year], (err, pRes) => {
+                            if (err) return fail(err);
                             const existing = pRes && pRes.rows && pRes.rows[0];
+                            const onSaved = (saveErr) => {
+                                if (failed) return;
+                                if (saveErr) return fail(saveErr);
+                                processed++;
+                                if (processed === teachers.length) {
+                                    db.query(`SELECT p.*, u.name as teacher_name
+                                      FROM teacher_payments p
+                                      JOIN users u ON p.teacher_id = u.id
+                                      WHERE u.academy_id = $1 AND month = $2 AND year = $3`, [acadId, month, year], (err, finalRes) => {
+                                        if (err) return next(err);
+                                        res.json(finalRes.rows || []);
+                                    });
+                                }
+                            };
                             if (existing) {
                                 if (!existing.paid) {
                                     db.query('UPDATE teacher_payments SET hours = $1, hourly_rate = $2, total_amount = $3 WHERE id = $4 AND academy_id = $5',
-                                        [hours, teacher.hourly_rate || 0, totalAmount, existing.id, acadId]);
+                                        [hours, teacher.hourly_rate || 0, totalAmount, existing.id, acadId], onSaved);
+                                } else {
+                                    onSaved(null);
                                 }
                             } else {
                                 db.query('INSERT INTO teacher_payments (teacher_id, academy_id, month, year, hours, hourly_rate, total_amount) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-                                    [teacher.id, acadId, month, year, hours, teacher.hourly_rate || 0, totalAmount]);
-                            }
-
-                            processed++;
-                            if (processed === teachers.length) {
-                                db.query(`SELECT p.*, u.name as teacher_name
-                                  FROM teacher_payments p
-                                  JOIN users u ON p.teacher_id = u.id
-                                  WHERE u.academy_id = $1 AND month = $2 AND year = $3`, [acadId, month, year], (err, finalRes) => {
-                                    if (err) return next(err);
-                                    res.json(finalRes.rows || []);
-                                });
+                                    [teacher.id, acadId, month, year, hours, teacher.hourly_rate || 0, totalAmount], onSaved);
                             }
                         });
                 });
@@ -190,10 +215,13 @@ router.post('/api/admin/send-monthly-report', authenticateJWT, requireAdmin, asy
 router.put('/api/payments/:id', authenticateJWT, requireTeacherOrAdmin, async (req, res, next) => {
     try {
         const { amount, due_date, status, paid_date } = req.body;
+        const isTeacher = req.user.role === 'teacher';
+        const params = [amount, due_date, status, paid_date, req.params.id, req.user.academy_id];
+        if (isTeacher) params.push(req.user.id);
         const result = await db.query(
             `UPDATE payments SET amount=$1, due_date=$2, status=$3, paid_date=$4
-             WHERE id=$5 AND student_id IN (SELECT id FROM students WHERE academy_id=$6) RETURNING *`,
-            [amount, due_date, status, paid_date, req.params.id, req.user.academy_id]
+             WHERE id=$5 AND student_id IN (SELECT id FROM students WHERE academy_id=$6${isTeacher ? ' AND assigned_teacher_id=$7' : ''}) RETURNING *`,
+            params
         );
         res.json(result.rows[0] || { updated: 0 });
     } catch (err) {
@@ -203,9 +231,12 @@ router.put('/api/payments/:id', authenticateJWT, requireTeacherOrAdmin, async (r
 
 router.delete('/api/payments/:id', authenticateJWT, requireTeacherOrAdmin, async (req, res, next) => {
     try {
+        const isTeacher = req.user.role === 'teacher';
+        const params = [req.params.id, req.user.academy_id];
+        if (isTeacher) params.push(req.user.id);
         await db.query(
-            'DELETE FROM payments WHERE id=$1 AND student_id IN (SELECT id FROM students WHERE academy_id=$2)',
-            [req.params.id, req.user.academy_id]
+            `DELETE FROM payments WHERE id=$1 AND student_id IN (SELECT id FROM students WHERE academy_id=$2${isTeacher ? ' AND assigned_teacher_id=$3' : ''})`,
+            params
         );
         res.json({ success: true });
     } catch (err) {

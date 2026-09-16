@@ -92,38 +92,56 @@ function runDailyJobs() {
                 const month = now.getMonth() === 0 ? 12 : now.getMonth();
                 const year = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
 
+                // Dedup key: this cron can fire more than once per day-1 (a redeploy
+                // re-triggers the 10s-after-boot run in initCrons) — without this, every
+                // redeploy landing on the 1st resends the same summary email.
+                const dedupLink = `/payments?monthlySummary=${acad.id}-${month}-${year}`;
                 try {
-                    db.query('SELECT email FROM users WHERE id = $1', [acad.owner_id], async (eErr, userRes) => {
-                        const adminEmail = userRes?.rows[0]?.email;
-                        if (!adminEmail || !process.env.RESEND_API_KEY) return;
+                    db.query(
+                        `SELECT 1 FROM notifications WHERE user_id=$1 AND type='monthly_teacher_summary' AND link=$2 LIMIT 1`,
+                        [acad.owner_id, dedupLink],
+                        (dedupErr, dedupRes) => {
+                            if (dedupErr || dedupRes?.rows?.length) return; // already sent, or can't tell — don't risk a dupe
 
-                        db.query(`SELECT p.*, u.name as teacher_name 
-                                  FROM teacher_payments p 
-                                  JOIN users u ON p.teacher_id = u.id 
-                                  WHERE u.academy_id = $1 AND month = $2 AND year = $3`, [acad.id, month, year], (err, r) => {
-                            if (!err && r && r.rows && r.rows.length > 0) {
-                                let tableHtml = '<table border="1" cellpadding="5" cellspacing="0" style="width:100%; border-collapse:collapse; text-align:left;">';
-                                tableHtml += '<tr style="background:#f1f5f9;"><th>Profesor</th><th>Horas</th><th>Tarifa</th><th>Total</th></tr>';
-                                let grandTotal = 0;
-                                r.rows.forEach(t => {
-                                    tableHtml += `<tr><td>${t.teacher_name}</td><td>${t.hours.toFixed(1)}h</td><td>${t.hourly_rate}€/h</td><td>${t.total_amount}€</td></tr>`;
-                                    grandTotal += t.total_amount;
+                            db.query('SELECT email FROM users WHERE id = $1', [acad.owner_id], async (eErr, userRes) => {
+                                const adminEmail = userRes?.rows[0]?.email;
+                                if (!adminEmail || !process.env.RESEND_API_KEY) return;
+
+                                db.query(`SELECT p.*, u.name as teacher_name
+                                          FROM teacher_payments p
+                                          JOIN users u ON p.teacher_id = u.id
+                                          WHERE u.academy_id = $1 AND month = $2 AND year = $3`, [acad.id, month, year], (err, r) => {
+                                    if (!err && r && r.rows && r.rows.length > 0) {
+                                        let tableHtml = '<table border="1" cellpadding="5" cellspacing="0" style="width:100%; border-collapse:collapse; text-align:left;">';
+                                        tableHtml += '<tr style="background:#f1f5f9;"><th>Profesor</th><th>Horas</th><th>Tarifa</th><th>Total</th></tr>';
+                                        let grandTotal = 0;
+                                        r.rows.forEach(t => {
+                                            tableHtml += `<tr><td>${t.teacher_name}</td><td>${t.hours.toFixed(1)}h</td><td>${t.hourly_rate}€/h</td><td>${t.total_amount}€</td></tr>`;
+                                            grandTotal += t.total_amount;
+                                        });
+                                        tableHtml += `<tr><td colspan="3" align="right"><strong>Total:</strong></td><td><strong>${grandTotal}€</strong></td></tr></table>`;
+
+                                        fetch('https://api.resend.com/emails', {
+                                            method: 'POST',
+                                            headers: { 'Authorization': `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({
+                                                from: 'AcademiaPro <no-reply@academiapro.academy>',
+                                                to: adminEmail,
+                                                subject: `Resumen mensual de profesores - ${acad.name} - ${month}/${year}`,
+                                                html: `<h2>Resumen mensual</h2>${tableHtml}`
+                                            })
+                                        }).catch(e => console.error(e));
+
+                                        createNotification(acad.owner_id, acad.id, 'monthly_teacher_summary',
+                                            '📊 Resumen mensual de profesores enviado',
+                                            `Se ha enviado a ${adminEmail} el resumen de ${month}/${year}.`,
+                                            dedupLink
+                                        );
+                                    }
                                 });
-                                tableHtml += `<tr><td colspan="3" align="right"><strong>Total:</strong></td><td><strong>${grandTotal}€</strong></td></tr></table>`;
-
-                                fetch('https://api.resend.com/emails', {
-                                    method: 'POST',
-                                    headers: { 'Authorization': `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({
-                                        from: 'AcademiaPro <no-reply@academiapro.academy>',
-                                        to: adminEmail,
-                                        subject: `Resumen mensual de profesores - ${acad.name} - ${month}/${year}`,
-                                        html: `<h2>Resumen mensual</h2>${tableHtml}`
-                                    })
-                                }).catch(e => console.error(e));
-                            }
-                        });
-                    });
+                            });
+                        }
+                    );
                 } catch (e) { }
             });
         });

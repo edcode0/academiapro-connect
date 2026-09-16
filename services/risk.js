@@ -9,26 +9,36 @@ const checkStudentRisk = (studentId) => {
         if (err || !student) return;
         db.query(`SELECT homework_done FROM sessions WHERE student_id = $1 ORDER BY date DESC LIMIT 3`, [studentId], (err, resSessions) => {
             const sessions = resSessions?.rows || [];
-            if (!err && sessions.length >= 3) {
-                const allNoHomework = sessions.every(s => !s.homework_done);
-                if (allNoHomework) {
-                    db.query(`UPDATE students SET status = 'at_risk' WHERE id = $1`, [studentId]);
-                    notifyAtRisk(studentId, 'No entrega deberes (3 sesiones seguidas)');
-                    return;
-                }
-            }
+            const homeworkRisk = !err && sessions.length >= 3 && sessions.every(s => !s.homework_done);
+
             db.query(`SELECT score FROM exams WHERE student_id = $1 ORDER BY date DESC LIMIT 4`, [studentId], (err, resExams) => {
                 const exams = resExams?.rows || [];
+                let gradeRisk = false;
                 if (!err && exams.length >= 4) {
                     const scores = exams.slice(0, 4).map(e => e.score);
                     const validScores = scores.filter(s => s !== null && s !== undefined && !isNaN(Number(s)));
-                    if (validScores.length < 4) return;
-                    const last2Avg = (validScores[0] + validScores[1]) / 2;
-                    const prev2Avg = (validScores[2] + validScores[3]) / 2;
-                    if (last2Avg < prev2Avg) {
-                        db.query(`UPDATE students SET status = 'at_risk' WHERE id = $1`, [studentId]);
-                        notifyAtRisk(studentId, 'Bajada de notas en los últimos exámenes');
+                    if (validScores.length === 4) {
+                        const last2Avg = (validScores[0] + validScores[1]) / 2;
+                        const prev2Avg = (validScores[2] + validScores[3]) / 2;
+                        gradeRisk = last2Avg < prev2Avg;
                     }
+                }
+
+                if (homeworkRisk || gradeRisk) {
+                    // Only flag+notify on the transition into risk — re-evaluating on every
+                    // session/exam write while already at_risk used to re-send the same
+                    // "alumno en riesgo" notification every single time.
+                    if (student.status !== 'at_risk') {
+                        db.query(`UPDATE students SET status = 'at_risk' WHERE id = $1`, [studentId]);
+                        notifyAtRisk(studentId, homeworkRisk
+                            ? 'No entrega deberes (3 sesiones seguidas)'
+                            : 'Bajada de notas en los últimos exámenes');
+                    }
+                } else if (student.status === 'at_risk') {
+                    // Neither risk condition holds anymore — recover. Without this a
+                    // student flagged at_risk (here or by the inactivity sweep below)
+                    // stayed flagged forever, even after catching back up.
+                    db.query(`UPDATE students SET status = 'active' WHERE id = $1`, [studentId]);
                 }
             });
         });

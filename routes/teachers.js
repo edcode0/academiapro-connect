@@ -82,6 +82,7 @@ router.get('/api/admin/teachers/:id', authenticateJWT, requireAdmin, (req, res, 
             ORDER BY s.name ASC
         `;
             db.query(studentsSQL, [req.params.id, req.user.academy_id], (err, sRes) => {
+                if (err) return next(err);
                 const students = sRes?.rows || [];
 
                 const sessionsSQL = `
@@ -92,6 +93,7 @@ router.get('/api/admin/teachers/:id', authenticateJWT, requireAdmin, (req, res, 
                 ORDER BY se.date DESC
             `;
                 db.query(sessionsSQL, [req.params.id, req.user.academy_id, monthStart, monthEnd], (err, seRes) => {
+                    if (err) return next(err);
                     const sessions = seRes?.rows || [];
                     const indivMinutes = sessions.filter(s => !s.session_type || s.session_type === 'individual').reduce((acc, s) => acc + (s.duration_minutes || 0), 0);
                     const groupMinutes = sessions.filter(s => s.session_type === 'group').reduce((acc, s) => acc + (s.duration_minutes || 0), 0);
@@ -109,9 +111,11 @@ router.get('/api/admin/teachers/:id', authenticateJWT, requireAdmin, (req, res, 
                     WHERE s.assigned_teacher_id = $1 AND s.academy_id = $2
                 `;
                     db.query(avgScoreSQL, [req.params.id, req.user.academy_id], (err, avgRes) => {
+                        if (err) return next(err);
                         const avgScore = avgRes?.rows[0]?.avg_score ? parseFloat(avgRes.rows[0].avg_score).toFixed(1) : '-';
 
                         db.query('SELECT * FROM teacher_payments WHERE teacher_id = $1 AND academy_id = $2 ORDER BY year DESC, month DESC', [req.params.id, req.user.academy_id], (err, payRes) => {
+                            if (err) return next(err);
                             res.json({
                                 teacher,
                                 students,
@@ -216,11 +220,14 @@ router.post('/api/admin/teachers/:id/mark-paid', authenticateJWT, requireAdmin, 
 
 router.delete('/api/admin/teachers/:id', authenticateJWT, requireAdmin, (req, res, next) => {
     db.query(`SELECT id FROM users WHERE id = $1 AND role IN ('teacher', 'admin') AND academy_id = $2`, [req.params.id, req.user.academy_id], (err, row) => {
+        if (err) return next(err);
         const teacher = row?.rows[0];
         if (!teacher) return res.status(404).json({ error: 'Teacher not found' });
 
-        db.query('UPDATE students SET assigned_teacher_id = NULL WHERE assigned_teacher_id = $1 AND academy_id = $2', [req.params.id, req.user.academy_id]);
-        db.query('UPDATE users SET academy_id = NULL WHERE id = $1', [req.params.id], () => {
+        db.query('UPDATE students SET assigned_teacher_id = NULL WHERE assigned_teacher_id = $1 AND academy_id = $2', [req.params.id, req.user.academy_id],
+            e => e && console.error('[DELETE teacher] student unassign failed:', e.message));
+        db.query('UPDATE users SET academy_id = NULL WHERE id = $1', [req.params.id], (delErr) => {
+            if (delErr) return next(delErr);
             res.json({ success: true });
         });
     });
