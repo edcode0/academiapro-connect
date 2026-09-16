@@ -6,6 +6,7 @@ const bcrypt   = require('bcryptjs');
 const passport = require('passport');
 const crypto   = require('crypto');
 const db       = require('../db');
+const isPostgres = db.isPostgres;
 const {
     authenticateJWT,
     buildAuthCookieOptions,
@@ -189,7 +190,7 @@ router.post('/api/auth/join', async (req, res, next) => {
                 `SELECT il.role, il.academy_id, a.name, a.teacher_code, a.student_code, a.id
                  FROM invitation_links il
                  JOIN academies a ON a.id = il.academy_id
-                 WHERE il.token = $1 AND il.expires_at > NOW()`,
+                 WHERE il.token = $1 AND il.expires_at > ${isPostgres ? "NOW()" : "datetime('now')"}`,
                 [invite_token]
             );
             const invite = inviteResult.rows?.[0] || inviteResult[0];
@@ -530,7 +531,7 @@ router.post('/api/academy/invite', authenticateJWT, requireTeacherOrAdmin, async
 
         const result = await db.query(
             `INSERT INTO invitation_links (academy_id, role, token, expires_at, created_by)
-             VALUES ($1, $2, $3, NOW() + INTERVAL '7 days', $4)
+             VALUES ($1, $2, $3, ${isPostgres ? "NOW() + INTERVAL '7 days'" : "datetime('now', '+7 days')"}, $4)
              RETURNING expires_at`,
             [academy_id, role, token, req.user.id]
         );
@@ -553,7 +554,7 @@ router.get('/api/auth/invite/:token', async (req, res, next) => {
             `SELECT il.academy_id, il.role, a.name AS academy_name
              FROM invitation_links il
              JOIN academies a ON a.id = il.academy_id
-             WHERE il.token = $1 AND il.expires_at > NOW()`,
+             WHERE il.token = $1 AND il.expires_at > ${isPostgres ? "NOW()" : "datetime('now')"}`,
             [token]
         );
 

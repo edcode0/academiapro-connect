@@ -10,6 +10,7 @@ const groqClient  = require('../services/groq');
 const { authenticateJWT }                      = require('../middleware/auth');
 const { requireStudent, requireTeacherOrAdmin } = require('../middleware/roles');
 const { createNotification }                   = require('../notifications');
+const isPostgres = db.isPostgres;
 
 router.get('/student/reports', authenticateJWT, requireStudent, (req, res, next) => {
     db.query('SELECT * FROM reports WHERE student_id = (SELECT id FROM students WHERE user_id = $1) ORDER BY year DESC, month DESC', [req.user.id], (err, result) => {
@@ -65,7 +66,10 @@ router.post('/generate-report', authenticateJWT, requireTeacherOrAdmin, async (r
         const [sessionsR, examsR, simsR] = await Promise.all([
             db.query('SELECT * FROM sessions WHERE student_id=$1 AND date>=$2 AND date<=$3 ORDER BY date', [sid, monthStart, monthEnd]),
             db.query('SELECT * FROM exams WHERE student_id=$1 AND date>=$2 AND date<=$3 ORDER BY date', [sid, monthStart, monthEnd]),
-            db.query("SELECT * FROM simulator_results WHERE student_id=$1 AND created_at::text LIKE $2", [sid, `${yearNum}-${String(monthNum).padStart(2, '0')}%`]).catch(() => ({ rows: [] }))
+            db.query(
+                `SELECT * FROM simulator_results WHERE student_id=$1 AND ${isPostgres ? 'created_at::text' : 'created_at'} LIKE $2`,
+                [sid, `${yearNum}-${String(monthNum).padStart(2, '0')}%`]
+            ).catch(() => ({ rows: [] }))
         ]);
         const sessions = sessionsR.rows || [];
         const exams = examsR.rows || [];

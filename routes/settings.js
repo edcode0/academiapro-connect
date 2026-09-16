@@ -77,8 +77,8 @@ router.get('/onboarding/status', authenticateJWT, async (req, res, next) => {
         if (user?.onboarding_completed) return res.json({ show: false });
 
         const [students, teachers, codes] = await Promise.all([
-            db.query('SELECT COUNT(*) FROM students WHERE academy_id = $1', [req.user.academy_id]),
-            db.query("SELECT COUNT(*) FROM users WHERE academy_id = $1 AND role = 'teacher'", [req.user.academy_id]),
+            db.query('SELECT COUNT(*) AS count FROM students WHERE academy_id = $1', [req.user.academy_id]),
+            db.query("SELECT COUNT(*) AS count FROM users WHERE academy_id = $1 AND role = 'teacher'", [req.user.academy_id]),
             db.query('SELECT teacher_code, student_code FROM academies WHERE id = $1', [req.user.academy_id])
         ]);
 

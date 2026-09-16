@@ -6,10 +6,21 @@ const path       = require('path');
 
 const TEMPLATES_DIR = path.join(__dirname, 'email-templates');
 
+function escapeHtml(value) {
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 function loadTemplate(name, vars) {
     let html = fs.readFileSync(path.join(TEMPLATES_DIR, `${name}.html`), 'utf8');
     for (const [key, value] of Object.entries(vars))
-        html = html.replaceAll(`{{${key}}}`, value);
+        // Replacer function, not a string: a plain-string 2nd arg to replaceAll still
+        // special-cases $&/$1/$$ patterns, which would corrupt a name/URL containing them.
+        html = html.replaceAll(`{{${key}}}`, () => escapeHtml(value));
     return html;
 }
 

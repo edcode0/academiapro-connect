@@ -83,8 +83,13 @@ function createSqliteRunner(connection) {
 
       return new Promise((resolve, reject) => {
         try {
+          // A statement with RETURNING produces rows just like a SELECT (SQLite 3.35+,
+          // bundled driver supports it) — route it the same way, or connection.run()
+          // silently discards whatever it returned and callers reading result.rows[0]
+          // get undefined even though the write itself succeeded.
           const isSelect = text.trim().toUpperCase().startsWith('SELECT') ||
-            text.trim().toUpperCase().startsWith('WITH');
+            text.trim().toUpperCase().startsWith('WITH') ||
+            /\bRETURNING\b/i.test(text);
           const { sql, args } = convertSqliteQuery(text, params);
           if (isSelect) {
             connection.all(sql, args, (err, rows) => {
@@ -438,8 +443,15 @@ async function initDb() {
 
   // Safe column additions via try/catch wrapper
   const runMigration = async (sql) => {
+    // SQLite's ALTER TABLE ADD COLUMN has no IF NOT EXISTS clause — it's a syntax
+    // error there, silently swallowed below, so the column never actually got added
+    // on a fresh local SQLite DB. Stripping the clause is safe: a genuine "column
+    // already exists" error is exactly what this wrapper's catch is already for.
+    const finalSql = (!isPostgres && /ADD COLUMN IF NOT EXISTS/i.test(sql))
+      ? sql.replace(/ADD COLUMN IF NOT EXISTS/i, 'ADD COLUMN')
+      : sql;
     try {
-      await db.run(sql);
+      await db.run(finalSql);
     } catch (err) {
       // Ignore errors for existing columns or other safe migration errors
     }
@@ -745,6 +757,7 @@ async function initDb() {
     'CREATE INDEX IF NOT EXISTS idx_ai_conversations_user_id ON ai_conversations(user_id)',
     'CREATE INDEX IF NOT EXISTS idx_ai_conversations_academy_id ON ai_conversations(academy_id)',
     'CREATE INDEX IF NOT EXISTS idx_ai_conversations_updated_at ON ai_conversations(updated_at)',
+    'CREATE INDEX IF NOT EXISTS idx_ai_messages_conversation_id ON ai_messages(conversation_id)',
 
     // available_slots
     'CREATE INDEX IF NOT EXISTS idx_available_slots_student_id ON available_slots(student_id)',

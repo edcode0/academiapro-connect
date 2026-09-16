@@ -64,9 +64,10 @@ module.exports = function initChatSocket(io) {
                     return;
                 }
 
+                const nowSql = db.isPostgres ? 'NOW()' : "datetime('now')";
                 const result = await db.query(
                     `INSERT INTO messages (room_id, sender_id, academy_id, content, created_at)
-                     VALUES ($1, $2, $3, $4, NOW()) RETURNING *`,
+                     VALUES ($1, $2, $3, $4, ${nowSql}) RETURNING *`,
                     [roomId, user.id, user.academy_id, content.trim()]
                 );
                 const message = result.rows[0];

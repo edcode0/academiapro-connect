@@ -1,4 +1,5 @@
 const db = require('./db');
+const isPostgres = db.isPostgres;
 const { createNotification } = require('./notifications');
 const { generateRecurringSlots } = require('./services/recurring');
 const { generateMonthlyPayments } = require('./services/billing');
@@ -41,10 +42,11 @@ function runDailyJobs() {
                 if (p.admin_id) {
                     db.query(
                         `SELECT 1 FROM notifications WHERE user_id=$1 AND type='payment_overdue' AND link=$2
-                         AND created_at > NOW() - INTERVAL '24 hours' LIMIT 1`,
+                         AND created_at > ${isPostgres ? "NOW() - INTERVAL '24 hours'" : "datetime('now', '-24 hours')"} LIMIT 1`,
                         [p.admin_id, `/payments?id=${p.id}`],
                         (e, r) => {
-                            if (!e && !r?.rows?.length) {
+                            if (e) { console.error('[Cron] Payment-overdue dedup check failed:', e.message); return; }
+                            if (!r?.rows?.length) {
                                 createNotification(p.admin_id, p.academy_id, 'payment_overdue',
                                     `💳 Pago vencido: ${p.student_name}`,
                                     `${p.amount}€ pendiente desde ${p.due_date}`,

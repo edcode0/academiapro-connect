@@ -112,7 +112,7 @@ module.exports = function makeChatRouter(io) {
             }
             const result = await db.query(
                 `INSERT INTO messages (room_id, sender_id, academy_id, content, file_url, file_name, file_type, created_at)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) RETURNING *`,
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, ${isPostgres ? 'NOW()' : "datetime('now')"}) RETURNING *`,
                 [roomId, req.user.id, req.user.academy_id, content || '', file_url || null, file_name || null, file_type || null]
             );
             const message = result.rows[0];

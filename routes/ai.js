@@ -62,20 +62,21 @@ router.post('/api/ai-tutor/chat', authenticateJWT, async (req, res, next) => {
             if (!convCheck.rows.length) conversationId = null; // reject cross-user access
         }
 
+        const nowSql = isPostgres ? 'NOW()' : "datetime('now')";
         if (!conversationId) {
           const newConv = await db.query(
-            'INSERT INTO ai_conversations (user_id, academy_id, title, created_at, updated_at) VALUES ($1, $2, $3, NOW(), NOW()) RETURNING id',
+            `INSERT INTO ai_conversations (user_id, academy_id, title, created_at, updated_at) VALUES ($1, $2, $3, ${nowSql}, ${nowSql}) RETURNING id`,
             [req.user.id, req.user.academy_id, userMessageStr.substring(0, 50)]
           );
           conversationId = newConv.rows[0].id;
         } else {
           // Update updated_at on existing conversation
-          await db.query('UPDATE ai_conversations SET updated_at = NOW() WHERE id = $1', [conversationId]).catch(err => console.error('[AI Tutor] Conversation timestamp update failed:', err.message));
+          await db.query(`UPDATE ai_conversations SET updated_at = ${nowSql} WHERE id = $1`, [conversationId]).catch(err => console.error('[AI Tutor] Conversation timestamp update failed:', err.message));
         }
 
         // Save user message BEFORE calling AI
         await db.query(
-          'INSERT INTO ai_messages (conversation_id, role, content, created_at) VALUES ($1, $2, $3, NOW())',
+          `INSERT INTO ai_messages (conversation_id, role, content, created_at) VALUES ($1, $2, $3, ${nowSql})`,
           [conversationId, 'user', userMessageStr]
         );
 
@@ -103,7 +104,7 @@ router.post('/api/ai-tutor/chat', authenticateJWT, async (req, res, next) => {
 
         // Save AI response
         await db.query(
-          'INSERT INTO ai_messages (conversation_id, role, content, created_at) VALUES ($1, $2, $3, NOW())',
+          `INSERT INTO ai_messages (conversation_id, role, content, created_at) VALUES ($1, $2, $3, ${nowSql})`,
           [conversationId, 'assistant', aiResponse]
         );
 
