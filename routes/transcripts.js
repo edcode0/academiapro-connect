@@ -22,7 +22,11 @@ const { createNotification } = require('../notifications');
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const OAUTH_STATE_MAX_AGE_MS = 15 * 60 * 1000;
-const encryptGoogleToken = db.encryptGoogleToken || (value => value);
+const encryptGoogleToken = value => {
+    if (!value) return value;
+    if (typeof db.encryptGoogleToken !== 'function') throw new Error('Google token encryption unavailable');
+    return db.encryptGoogleToken(value);
+};
 
 // Resolve a student's USER id from whatever identifier the caller passed in:
 // it may already be a users.id, a students.id linked to a user, or (legacy data)

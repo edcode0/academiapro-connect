@@ -17,7 +17,11 @@ const { requireStudent, requireTeacherOrAdmin } = require('../middleware/roles')
 
 const isPostgres = db.isPostgres;
 const OAUTH_STATE_MAX_AGE_MS = 15 * 60 * 1000;
-const encryptGoogleToken = db.encryptGoogleToken || (value => value);
+const encryptGoogleToken = value => {
+    if (!value) return value;
+    if (typeof db.encryptGoogleToken !== 'function') throw new Error('Google token encryption unavailable');
+    return db.encryptGoogleToken(value);
+};
 
 async function resolveMeetTeacherContext({ req, studentId, sessionId, slotId }) {
     if (slotId) {

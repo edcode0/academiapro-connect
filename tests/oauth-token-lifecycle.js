@@ -74,20 +74,22 @@ function captureConsole() {
 
 const realDb = require('../db');
 
-function encryptedDb(query) {
-    return {
+function encryptedDb(query, includeEncryption = true) {
+    const db = {
         isPostgres: true,
-        encryptGoogleToken: realDb.encryptGoogleToken,
         decryptGoogleToken: realDb.decryptGoogleToken,
         query
     };
+    if (includeEncryption) db.encryptGoogleToken = realDb.encryptGoogleToken;
+    return db;
 }
 
 function loadCalendarRouter({
     query,
     revokeToken = async () => {},
     getTokenError = null,
-    calendarApi = () => ({})
+    calendarApi = () => ({}),
+    includeEncryption = true
 }) {
     const harness = createRouterHarness();
     class OAuth2 {
@@ -100,7 +102,7 @@ function loadCalendarRouter({
     }
     loadWithMocks(path.join(ROOT, 'routes/calendar.js'), {
         express: harness.express,
-        '../db': encryptedDb(query),
+        '../db': encryptedDb(query, includeEncryption),
         googleapis: { google: { auth: { OAuth2 }, calendar: calendarApi } },
         '../services/calendar': {
             makeOAuth2Client: () => ({}),
@@ -128,7 +130,7 @@ function loadCalendarRouter({
     return harness.routes;
 }
 
-function loadCalendarService({ query, insertError = null, deleteError = null }) {
+function loadCalendarService({ query, insertError = null, deleteError = null, includeEncryption = true }) {
     let tokenHandler;
     const oauth = {
         setCredentials() {},
@@ -144,7 +146,7 @@ function loadCalendarService({ query, insertError = null, deleteError = null }) 
         }
     } };
     const service = loadWithMocks(path.join(ROOT, 'services/calendar.js'), {
-        '../db': encryptedDb(query),
+        '../db': encryptedDb(query, includeEncryption),
         googleapis: { google: {
             auth: { OAuth2: function OAuth2() { return oauth; } },
             calendar: () => calendarApi
@@ -153,7 +155,12 @@ function loadCalendarService({ query, insertError = null, deleteError = null }) 
     return { service, getTokenHandler: () => tokenHandler };
 }
 
-function loadGmailRouter({ query, revokeToken = async () => {}, checkTranscripts = async () => 0 }) {
+function loadGmailRouter({
+    query,
+    revokeToken = async () => {},
+    checkTranscripts = async () => 0,
+    includeEncryption = true
+}) {
     const harness = createRouterHarness();
     class OAuth2 {
         generateAuthUrl() { return 'https://accounts.google.test/auth'; }
@@ -165,7 +172,7 @@ function loadGmailRouter({ query, revokeToken = async () => {}, checkTranscripts
     const makeOAuth2Client = () => new OAuth2();
     loadWithMocks(path.join(ROOT, 'routes/transcripts.js'), {
         express: harness.express,
-        '../db': encryptedDb(query),
+        '../db': encryptedDb(query, includeEncryption),
         googleapis: { google: {} },
         '../services/groq': {},
         '../services/calendar': { makeOAuth2Client },
@@ -184,7 +191,7 @@ function loadGmailRouter({ query, revokeToken = async () => {}, checkTranscripts
     return harness.routes;
 }
 
-function loadGmailService({ query, listError = null }) {
+function loadGmailService({ query, listError = null, includeEncryption = true }) {
     let tokenHandler;
     const oauth = {
         setCredentials() {},
@@ -195,7 +202,7 @@ function loadGmailService({ query, listError = null }) {
         return { data: { messages: [] } };
     } } } };
     const makeService = loadWithMocks(path.join(ROOT, 'services/gmail.js'), {
-        '../db': encryptedDb(query),
+        '../db': encryptedDb(query, includeEncryption),
         './groq': {},
         './homework-reminders': {
             createHomeworkReminderFromTranscript: async () => null, buildHomeworkReminderPrompt: () => ''
@@ -331,6 +338,60 @@ async function testSuccessfulConnectionsStoreCiphertext() {
         assert.strictEqual(realDb.decryptGoogleToken(write.params[0]), `${prefix}-access-secret`);
         assert.strictEqual(realDb.decryptGoogleToken(write.params[1]), `${prefix}-refresh-secret`);
         assert.ok(!JSON.stringify(res.payload).includes(`${prefix}-access-secret`));
+    }
+}
+
+async function testMissingEncryptHelperNeverPersistsPlaintext() {
+    for (const [kind, loadRouter, callbackPath, prefix] of [
+        ['Calendar', loadCalendarRouter, '/api/calendar/callback', 'calendar'],
+        ['Gmail', loadGmailRouter, '/api/gmail/callback', 'gmail']
+    ]) {
+        const writes = [];
+        const secret = `${prefix}-access-secret`;
+        const routes = loadRouter({
+            query: async (sql, params = []) => { writes.push({ sql, params }); return { rows: [] }; },
+            includeEncryption: false
+        });
+        const logs = captureConsole();
+        let res;
+        try {
+            res = createResponse();
+            await routes.get.get(callbackPath)({ query: { code: 'code', state: signedState() } }, res, () => {});
+        } finally {
+            logs.restore();
+        }
+        assert.ok(!writes.some(item => item.sql.includes(`UPDATE users SET ${prefix}_access_token`)), `${kind} callback wrote without encryption`);
+        assert.strictEqual(res.redirectUrl, `/teacher/settings?${prefix}=error`);
+        assert.ok(!logs.output.join('\n').includes(secret));
+    }
+
+    for (const [kind, loadService, run, prefix] of [
+        ['Calendar', loadCalendarService, service => service.createCalendarEvent({
+            id: 8,
+            calendar_access_token: 'old-calendar-access',
+            calendar_refresh_token: 'old-calendar-refresh'
+        }, { start_datetime: '2026-09-20T10:00:00', end_datetime: '2026-09-20T11:00:00' }), 'calendar'],
+        ['Gmail', loadGmailService, service => service.checkAndProcessTranscripts({
+            id: 7,
+            academy_id: 3,
+            gmail_access_token: 'old-gmail-access',
+            gmail_refresh_token: 'old-gmail-refresh'
+        }), 'gmail']
+    ]) {
+        const writes = [];
+        const loaded = loadService({
+            query: async (sql, params = []) => { writes.push({ sql, params }); return { rows: [] }; },
+            includeEncryption: false
+        });
+        const logs = captureConsole();
+        try {
+            await run(loaded.service);
+            await loaded.getTokenHandler()({ access_token: `${prefix}-refreshed-secret`, expiry_date: 999 });
+        } finally {
+            logs.restore();
+        }
+        assert.ok(!writes.some(item => item.sql.includes(`${prefix}_access_token=`)), `${kind} refresh wrote without encryption`);
+        assert.ok(!logs.output.join('\n').includes(`${prefix}-refreshed-secret`));
     }
 }
 
@@ -708,12 +769,63 @@ async function testAccountDeletionRevokesAndClearsForAdminAndUser() {
     }
 }
 
+async function testAdminDeletionContinuesAfterOneCorruptTokenRow() {
+    const events = [];
+    const query = async (sql, params = []) => {
+        events.push({ type: 'query', sql, params });
+        if (sql === 'SELECT id FROM users WHERE academy_id=$1') {
+            assert.deepStrictEqual(params, [3]);
+            return { rows: [{ id: 1 }, { id: 2 }] };
+        }
+        if (sql.includes('calendar_access_token') && sql.startsWith('SELECT')) {
+            assert.match(sql, /id=\$1 AND academy_id=\$2/);
+            assert.strictEqual(params[1], 3);
+            if (params[0] === 1) throw new Error('unable to authenticate token=corrupt-ciphertext');
+            return { rows: [{
+                id: 2,
+                calendar_refresh_token: 'valid-calendar-refresh',
+                gmail_refresh_token: 'valid-gmail-refresh'
+            }] };
+        }
+        return { rows: [], rowCount: 2 };
+    };
+    const withTransaction = async work => work({ query: async (sql, params) => {
+        events.push({ type: 'transaction', sql, params });
+        return { rows: [], rowCount: 1 };
+    } });
+    const routes = loadAuthRouter({
+        query,
+        withTransaction,
+        revokeToken: async token => events.push({ type: 'revoke', token })
+    });
+    const logs = captureConsole();
+    let res;
+    try {
+        res = createResponse();
+        await routes.delete.get('/api/auth/delete-account')({
+            user: { id: 1, role: 'admin', academy_id: 3 }
+        }, res, () => {});
+    } finally {
+        logs.restore();
+    }
+    assert.deepStrictEqual(
+        events.filter(event => event.type === 'revoke').map(event => event.token),
+        ['valid-calendar-refresh', 'valid-gmail-refresh']
+    );
+    assert.deepStrictEqual(res.payload.googleRevocation, { attempted: 2, succeeded: 2, failed: 1 });
+    assert.ok(events.some(event => event.type === 'query' && event.sql.includes('WHERE academy_id=$1') && event.sql.startsWith('UPDATE users')));
+    assert.ok(events.some(event => event.type === 'transaction' && event.sql.includes('DELETE FROM users')));
+    assert.ok(!JSON.stringify(res.payload).includes('valid-'));
+    assert.ok(!logs.output.join('\n').includes('corrupt-ciphertext'));
+}
+
 (async () => {
     const tests = [
         testAuthenticatedEncryptionRoundTrip,
         testProductionRequiresEncryptionKey,
         testSqliteMigratesAndTransparentlyDecryptsTokens,
         testSuccessfulConnectionsStoreCiphertext,
+        testMissingEncryptHelperNeverPersistsPlaintext,
         testRefreshPersistsCiphertext,
         testCalendarRefreshPersistsCiphertext,
         testInvalidGrantAlwaysClearsWithoutLeakingToken,
@@ -725,7 +837,8 @@ async function testAccountDeletionRevokesAndClearsForAdminAndUser() {
         testExplicitDisconnectAlwaysClears,
         testCalendarDisconnectReportsSuccessfulRevocation,
         testCorruptCiphertextCannotBlockLocalCleanup,
-        testAccountDeletionRevokesAndClearsForAdminAndUser
+        testAccountDeletionRevokesAndClearsForAdminAndUser,
+        testAdminDeletionContinuesAfterOneCorruptTokenRow
     ];
     let failures = 0;
     for (const test of tests) {

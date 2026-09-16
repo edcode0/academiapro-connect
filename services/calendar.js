@@ -3,7 +3,11 @@
 const { google } = require('googleapis');
 const db = require('../db');
 
-const encryptGoogleToken = db.encryptGoogleToken || (value => value);
+const encryptGoogleToken = value => {
+    if (!value) return value;
+    if (typeof db.encryptGoogleToken !== 'function') throw new Error('Google token encryption unavailable');
+    return db.encryptGoogleToken(value);
+};
 
 function makeOAuth2Client() {
     return new google.auth.OAuth2(

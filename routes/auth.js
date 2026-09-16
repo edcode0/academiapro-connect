@@ -443,21 +443,29 @@ router.delete('/api/auth/delete-account', authenticateJWT, async (req, res, next
         console.log('Deleting account:', userId, userRole, academyId);
 
         const googleRevocation = { attempted: 0, succeeded: 0, failed: 0 };
+        let tokenUserIds = [userId];
         try {
-            const tokenUsers = await db.query(
-                userRole === 'admin' && academyId
-                    ? `SELECT id, calendar_access_token, calendar_refresh_token, gmail_access_token, gmail_refresh_token
-                       FROM users WHERE academy_id=$1`
-                    : `SELECT id, calendar_access_token, calendar_refresh_token, gmail_access_token, gmail_refresh_token
-                       FROM users WHERE id=$1`,
-                [userRole === 'admin' && academyId ? academyId : userId]
-            );
-            const oauth2Client = new google.auth.OAuth2(
-                process.env.GOOGLE_CLIENT_ID,
-                process.env.GOOGLE_CLIENT_SECRET,
-                (process.env.BASE_URL || '') + '/auth/google/callback'
-            );
-            for (const user of tokenUsers.rows || []) {
+            if (userRole === 'admin' && academyId) {
+                const users = await db.query('SELECT id FROM users WHERE academy_id=$1', [academyId]);
+                tokenUserIds = (users.rows || []).map(user => user.id);
+            }
+        } catch {
+            tokenUserIds = [];
+            googleRevocation.failed++;
+            console.warn('[Account deletion] Google grant owners could not be listed; continuing local deletion');
+        }
+        for (const tokenUserId of tokenUserIds) {
+            try {
+                const tokenUser = await db.query(
+                    userRole === 'admin' && academyId
+                        ? `SELECT id, calendar_access_token, calendar_refresh_token, gmail_access_token, gmail_refresh_token
+                           FROM users WHERE id=$1 AND academy_id=$2`
+                        : `SELECT id, calendar_access_token, calendar_refresh_token, gmail_access_token, gmail_refresh_token
+                           FROM users WHERE id=$1`,
+                    userRole === 'admin' && academyId ? [tokenUserId, academyId] : [tokenUserId]
+                );
+                const user = tokenUser.rows[0];
+                if (!user) continue;
                 for (const token of [
                     user.calendar_refresh_token || user.calendar_access_token,
                     user.gmail_refresh_token || user.gmail_access_token
@@ -465,6 +473,11 @@ router.delete('/api/auth/delete-account', authenticateJWT, async (req, res, next
                     if (!token) continue;
                     googleRevocation.attempted++;
                     try {
+                        const oauth2Client = new google.auth.OAuth2(
+                            process.env.GOOGLE_CLIENT_ID,
+                            process.env.GOOGLE_CLIENT_SECRET,
+                            (process.env.BASE_URL || '') + '/auth/google/callback'
+                        );
                         await oauth2Client.revokeToken(token);
                         googleRevocation.succeeded++;
                     } catch {
@@ -472,10 +485,10 @@ router.delete('/api/auth/delete-account', authenticateJWT, async (req, res, next
                         console.warn('[Account deletion] Google grant revocation failed; continuing local deletion');
                     }
                 }
+            } catch {
+                googleRevocation.failed++;
+                console.warn('[Account deletion] Google grants for one user could not be read; continuing local deletion');
             }
-        } catch {
-            googleRevocation.failed++;
-            console.warn('[Account deletion] Google grants could not be read; continuing local deletion');
         }
         await db.query(
             userRole === 'admin' && academyId
