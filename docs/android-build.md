@@ -23,8 +23,13 @@ https://academiapro.academy/.well-known/assetlinks.json
 
 ```bash
 cd android
-JAVA_HOME=/ruta/al/jdk-17 ANDROID_SDK_ROOT=/ruta/al/android-sdk ./gradlew bundleRelease
+JAVA_HOME=/ruta/al/jdk-17 ANDROID_SDK_ROOT=/ruta/al/android-sdk \
+ACADEMIAPRO_UPLOAD_KEY_PASSWORD='contraseña-del-keystore' ./gradlew bundleRelease
 ```
+
+El build de release falla deliberadamente si no recibe la contraseña: así no se
+puede generar por accidente un AAB sin firma. La ruta y el alias se pueden
+sobrescribir con `ACADEMIAPRO_UPLOAD_KEYSTORE` y `ACADEMIAPRO_UPLOAD_KEY_ALIAS`.
 
 El bundle se genera en:
 

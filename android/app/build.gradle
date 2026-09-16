@@ -50,6 +50,10 @@ def twaManifest = [
     orientation: 'default',
 ]
 
+def uploadKeystore = file(System.getenv('ACADEMIAPRO_UPLOAD_KEYSTORE') ?: "$rootDir/academiapro-upload.keystore")
+def uploadKeyAlias = System.getenv('ACADEMIAPRO_UPLOAD_KEY_ALIAS') ?: 'academiapro'
+def uploadKeyPassword = System.getenv('ACADEMIAPRO_UPLOAD_KEY_PASSWORD')
+
 android {
     compileSdkVersion 36
     namespace "academy.academiapro.app"
@@ -150,9 +154,21 @@ android {
 
         
     }
+    signingConfigs {
+        release {
+            if (!uploadKeystore.exists() || !uploadKeyPassword) {
+                throw new GradleException('Set ACADEMIAPRO_UPLOAD_KEY_PASSWORD and provide the upload keystore before building release')
+            }
+            storeFile uploadKeystore
+            storePassword uploadKeyPassword
+            keyAlias uploadKeyAlias
+            keyPassword uploadKeyPassword
+        }
+    }
     buildTypes {
         release {
             minifyEnabled true
+            signingConfig signingConfigs.release
         }
     }
     compileOptions {

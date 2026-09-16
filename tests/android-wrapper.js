@@ -46,6 +46,9 @@ const androidManifest = fs.readFileSync(path.join(root, 'android/app/src/main/An
 assert.match(buildGradle, /applicationId ['"]academy\.academiapro\.app['"]/);
 assert.match(buildGradle, /targetSdkVersion 36/);
 assert.match(buildGradle, /fallbackType: ['"]customtabs['"]/);
+assert.match(buildGradle, /signingConfigs\s*\{/);
+assert.match(buildGradle, /ACADEMIAPRO_UPLOAD_KEYSTORE/);
+assert.match(buildGradle, /signingConfig signingConfigs\.release/);
 assert.doesNotMatch(buildGradle, /android\.webkit\.WebView/);
 assert.doesNotMatch(androidManifest, /WebViewFallbackActivity/);
 
@@ -54,5 +57,8 @@ const androidFiles = fs.readdirSync(path.join(root, 'android'), { withFileTypes:
   .map(entry => fs.readFileSync(path.join(root, 'android', entry.name), 'utf8'))
   .join('\n');
 assert.doesNotMatch(androidFiles, /GOOGLE_CLIENT_SECRET|RAILWAY_TOKEN|access_token/);
+
+const deploymentDocs = fs.readFileSync(path.join(root, 'README_DEPLOYMENT.md'), 'utf8');
+assert.match(deploymentDocs, /GOOGLE_TOKEN_ENCRYPTION_KEY/);
 
 console.log('Android wrapper contract: PASS');

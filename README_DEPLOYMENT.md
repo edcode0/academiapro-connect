@@ -16,6 +16,7 @@ Debes configurar las siguientes variables en la sección **Settings -> Variables
 *   `GOOGLE_CLIENT_ID`: ID de cliente para Google OAuth.
 *   `GOOGLE_CLIENT_SECRET`: Secreto de cliente para Google OAuth.
 *   `GOOGLE_CALLBACK_URL`: URL completa de callback (ej: `https://tu-app.up.railway.app/auth/google/callback`).
+*   `GOOGLE_TOKEN_ENCRYPTION_KEY`: Clave larga y aleatoria para cifrar los tokens de Google guardados en la base de datos.
 *   `NODE_ENV`: cámbialo a `production`.
 
 ## 3. Pasos para el Despliegue
