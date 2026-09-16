@@ -1,0 +1,48 @@
+{
+  "packageId": "academy.academiapro.app",
+  "host": "academiapro.academy",
+  "name": "AcademiaPro",
+  "launcherName": "AcademiaPro",
+  "display": "standalone",
+  "themeColor": "#6D5DFC",
+  "themeColorDark": "#000000",
+  "navigationColor": "#000000",
+  "navigationColorDark": "#000000",
+  "navigationDividerColor": "#000000",
+  "navigationDividerColorDark": "#000000",
+  "backgroundColor": "#F8FAFC",
+  "enableNotifications": true,
+  "startUrl": "/",
+  "iconUrl": "https://academiapro.academy/icon-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "android/academiapro-upload.keystore",
+    "alias": "academiapro"
+  },
+  "appVersionName": "1",
+  "appVersionCode": 1,
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://academiapro.academy/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://academiapro.academy/",
+  "minSdkVersion": 21,
+  "orientation": "default",
+  "fingerprints": [
+    "77:3D:FB:6F:CD:F5:0F:67:0C:93:DE:7E:16:70:76:9B:DE:52:E8:BB:A6:9B:80:3C:39:BD:D3:7A:A8:7E:4D:DA"
+  ],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "protocolHandlers": [],
+  "fileHandlers": [],
+  "launchHandlerClientMode": "",
+  "displayOverride": [],
+  "appVersion": "1"
+}

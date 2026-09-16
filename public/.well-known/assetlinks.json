@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "academy.academiapro.app",
+      "sha256_cert_fingerprints": [
+        "77:3D:FB:6F:CD:F5:0F:67:0C:93:DE:7E:16:70:76:9B:DE:52:E8:BB:A6:9B:80:3C:39:BD:D3:7A:A8:7E:4D:DA"
+      ]
+    }
+  }
+]

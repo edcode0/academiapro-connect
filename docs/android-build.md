@@ -1,0 +1,63 @@
+# Construcción Android de AcademiaPro
+
+El wrapper es una Trusted Web Activity (TWA), no una app con WebView. Su
+paquete es `academy.academiapro.app`, abre `https://academiapro.academy/` y
+apunta a API 36.
+
+## Requisitos
+
+- JDK 17.
+- Android SDK con `platforms;android-36` y `build-tools;35.0.0`.
+- `ANDROID_SDK_ROOT` apuntando al SDK local.
+- La clave local `android/academiapro-upload.keystore`, que no se versiona.
+
+Antes de compilar, producción debe servir estos recursos:
+
+```text
+https://academiapro.academy/manifest.webmanifest
+https://academiapro.academy/icon-512.png
+https://academiapro.academy/.well-known/assetlinks.json
+```
+
+## Build local
+
+```bash
+cd android
+JAVA_HOME=/ruta/al/jdk-17 ANDROID_SDK_ROOT=/ruta/al/android-sdk ./gradlew bundleRelease
+```
+
+El bundle se genera en:
+
+```text
+android/app/build/outputs/bundle/release/app-release.aab
+```
+
+El build local actual se ha validado con `targetSdkVersion 36`.
+
+## Firma y Digital Asset Links
+
+La huella de la clave local de subida usada ahora es:
+
+```text
+77:3D:FB:6F:CD:F5:0F:67:0C:93:DE:7E:16:70:76:9B:DE:52:E8:BB:A6:9B:80:3C:39:BD:D3:7A:A8:7E:4D:DA
+```
+
+La contraseña de la clave no se guarda en Git. Conserva una copia segura del
+keystore: perderlo impide firmar actualizaciones compatibles antes de resolver
+la configuración de Play App Signing.
+
+Después de subir el primer bundle a Play Console, añade también la huella de
+la clave de **Play App Signing** a `public/.well-known/assetlinks.json` y
+despliega de nuevo. La huella de Play es la que necesitan las instalaciones
+distribuidas por Google Play; la huella local sirve para pruebas firmadas
+localmente.
+
+## Comprobaciones
+
+```bash
+node tests/android-wrapper.js
+git diff --check
+```
+
+El test comprueba paquete, dominio, manifest web, `assetlinks.json`, API 36,
+fallback Custom Tabs y ausencia de WebView/secretos del servidor.

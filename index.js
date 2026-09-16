@@ -203,6 +203,9 @@ app.use(makeTranscriptsRouter(io));
 
 // Public static files
 app.use('/assets', express.static(path.join(__dirname, 'public/assets')));
+app.get('/.well-known/assetlinks.json', (req, res) => {
+    res.type('application/json').sendFile(path.join(__dirname, 'public/.well-known/assetlinks.json'));
+});
 
 passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID || 'dummy',
