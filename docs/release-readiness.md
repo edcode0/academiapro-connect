@@ -100,13 +100,19 @@ The repository now contains a public static deletion resource that requires no l
 
 ## Android release artifact
 
-No `AndroidManifest.xml`, Gradle settings, Capacitor config, TWA manifest, Digital Asset Links file, or other Android wrapper was found in the repository, available refs, `/Users/edu/Desktop/app academy`, or `/Users/edu/Documents`.
+The repository now contains a minimal Bubblewrap Trusted Web Activity wrapper
+under `android/`, with no application WebView. The local release bundle has
+been built successfully; the live deployment and physical-device acceptance
+test remain pending.
 
 ### Frozen package identity
 
 - **Immutable Play Console package/application ID:** `academy.academiapro.app`.
 - This value is a confirmed release decision supplied from Play Console; it is not derived from this repository.
-- The Android build remains unverified. When the wrapper is supplied, its manifest/Gradle `applicationId`, signing identity, OAuth Android client, App Links/Digital Asset Links, and uploaded AAB must all match this package exactly.
+- The Gradle `applicationId`, TWA manifest, and generated bundle use
+  `academy.academiapro.app`. The local upload-certificate fingerprint is in
+  `public/.well-known/assetlinks.json`; add the Play App Signing fingerprint
+  there after the first upload and redeploy the web app.
 
 ### Android OAuth requirement
 
@@ -114,13 +120,17 @@ Google login and OAuth consent must use a secure external user agent: Chrome Cus
 
 Evidence: Google's OAuth policy forbids authorization requests in an embedded user agent, and Google's Android guidance does not support embedded WebViews for sign-in: <https://developers.google.com/identity/protocols/oauth2/policies>, <https://developers.google.com/identity/siwg/best-practices>, and <https://developers.google.com/identity/gsi/web/guides/supported-browsers>.
 
-Until an artifact is supplied, its status is **not started or not delivered**, and these facts remain unknown:
+Verified locally:
 
-- WebView, Custom Tabs, TWA, or native implementation;
-- whether the build actually declares `academy.academiapro.app`, and its version;
-- signing certificate fingerprints;
-- OAuth client, external-user-agent handling, and redirect/app-link behavior;
-- AAB/APK build status.
+- TWA with `customtabs` fallback and the generated `WebViewFallbackActivity`
+  declaration removed;
+- `academy.academiapro.app` and `targetSdkVersion 36`;
+- signed `.aab` at `android/app/build/outputs/bundle/release/app-release.aab`;
+- no server secrets or OAuth tokens in the Android project.
+
+Still pending: production deployment of the manifest/icon/asset-links files,
+an Android device or Play internal-test install, and the Play App Signing
+fingerprint.
 
 ## External identity limitations
 
@@ -145,7 +155,9 @@ Submission must also wait for these local/public gaps:
 - the corrected privacy/terms/deletion pages are not deployed; live privacy and terms are stale and deletion returns `404`;
 - live support returns `404` and `hola@academiapro.academy` has not passed a receive/reply test;
 - the public privacy policy and Gmail connection UI now include the Google Limited Use statement and the pre-authorization DeepSeek disclosure; deploy and verify both before submission;
-- no Android artifact, package proof, signing SHA-1, Android OAuth client, or return mechanism exists;
+- the Android artifact and package proof now exist locally; Play App Signing
+  fingerprint, production asset-links response, and physical return-flow test
+  remain pending;
 - Calendar/Gmail disconnect controls are now present in the two settings pages; verify them on the deployed build before submission.
 
 The exact production web redirects implied by the code are:
@@ -154,7 +166,9 @@ The exact production web redirects implied by the code are:
 - `https://academiapro.academy/api/calendar/callback`
 - `https://academiapro.academy/api/gmail/callback`
 
-Do not invent an Android redirect or create its OAuth client until Task 6 supplies the wrapper, `applicationId=academy.academiapro.app`, signing fingerprints, and external-user-agent return design. Full findings, justifications, blocker order, and the reviewer-video checklist are in `.superpowers/sdd/2026-09-16-academiapro-google-play-launch/task-5-report.md`.
+The TWA uses the existing HTTPS web callbacks and does not add a native Android
+OAuth redirect. Verify the external-user-agent behavior on-device before
+submission. Full findings, justifications, blocker order, and the reviewer-video checklist are in `.superpowers/sdd/2026-09-16-academiapro-google-play-launch/task-5-report.md`.
 
 ### Play Console
 
