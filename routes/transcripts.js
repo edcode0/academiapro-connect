@@ -22,6 +22,7 @@ const { createNotification } = require('../notifications');
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const OAUTH_STATE_MAX_AGE_MS = 15 * 60 * 1000;
+const encryptGoogleToken = db.encryptGoogleToken || (value => value);
 
 // Resolve a student's USER id from whatever identifier the caller passed in:
 // it may already be a users.id, a students.id linked to a user, or (legacy data)
@@ -107,13 +108,13 @@ module.exports = function makeTranscriptsRouter(io) {
             const oauth2Client = makeOAuth2Client();
             const { tokens } = await oauth2Client.getToken(code);
             await db.query(
-                'UPDATE users SET gmail_access_token=$1, gmail_refresh_token=$2, gmail_token_expiry=$3 WHERE id=$4',
-                [tokens.access_token, tokens.refresh_token, tokens.expiry_date, userId]
+                'UPDATE users SET gmail_access_token=$1, gmail_refresh_token=COALESCE($2, gmail_refresh_token), gmail_token_expiry=$3 WHERE id=$4',
+                [encryptGoogleToken(tokens.access_token), encryptGoogleToken(tokens.refresh_token), tokens.expiry_date, userId]
             );
             console.log('[Gmail] Connected for user:', userId);
             res.redirect('/teacher/settings?gmail=connected');
         } catch (err) {
-            console.error('[Gmail] Callback error:', err.message);
+            console.error('[Gmail] OAuth callback failed');
             res.redirect('/teacher/settings?gmail=error');
         }
     });
@@ -129,6 +130,33 @@ module.exports = function makeTranscriptsRouter(io) {
                 connected: !!user?.gmail_access_token,
                 transcript_email: user?.transcript_email || null
             });
+        } catch (err) {
+            serverErr(res, err);
+        }
+    });
+
+    router.delete('/api/gmail/disconnect', authenticateJWT, requireTeacherOrAdmin, async (req, res, next) => {
+        try {
+            const result = await db.query(
+                'SELECT gmail_access_token, gmail_refresh_token FROM users WHERE id=$1',
+                [req.user.id]
+            );
+            const user = result.rows[0];
+            const token = user?.gmail_refresh_token || user?.gmail_access_token;
+            let revocation = token ? 'failed' : 'not_needed';
+            if (token) {
+                try {
+                    await makeOAuth2Client().revokeToken(token);
+                    revocation = 'revoked';
+                } catch {
+                    console.warn('[Gmail] Grant revocation failed; clearing local credentials');
+                }
+            }
+            await db.query(
+                'UPDATE users SET gmail_access_token=NULL, gmail_refresh_token=NULL, gmail_token_expiry=NULL WHERE id=$1',
+                [req.user.id]
+            );
+            res.json({ success: true, revocation });
         } catch (err) {
             serverErr(res, err);
         }
@@ -154,8 +182,8 @@ module.exports = function makeTranscriptsRouter(io) {
             const processed = await gmailService.checkAndProcessTranscripts(teacher);
             res.json({ success: true, processed });
         } catch (err) {
-            console.error('[Gmail] check-transcripts error:', err.message);
-            serverErr(res, err);
+            console.error('[Gmail] Transcript check failed');
+            res.status(500).json({ error: 'No se pudieron comprobar las transcripciones de Gmail.' });
         }
     });
 
@@ -235,7 +263,7 @@ module.exports = function makeTranscriptsRouter(io) {
                     response_format: { type: "json_object" }
                 });
             } catch (e) {
-                console.error('DeepSeek API error:', e.message, e.status, e.error);
+                console.error('DeepSeek API error:', e.message, e.status);
                 return res.status(503).json({ error: 'El asistente IA no está disponible en este momento. Por favor, inténtalo de nuevo en unos minutos.' });
             }
 
@@ -243,7 +271,7 @@ module.exports = function makeTranscriptsRouter(io) {
             try {
                 jsonContent = JSON.parse(apiResponse.choices[0].message.content);
             } catch (e) {
-                console.error('JSON Parse error', e, apiResponse.choices[0].message.content);
+                console.error('JSON Parse error:', e.message);
                 return res.status(500).json({ error: 'La IA no devolvió un JSON válido.' });
             }
 

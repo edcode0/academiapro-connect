@@ -11,6 +11,7 @@ const { requireStudent, requireTeacherOrAdmin } = require('../middleware/roles')
 
 const isPostgres = db.isPostgres;
 const OAUTH_STATE_MAX_AGE_MS = 15 * 60 * 1000;
+const encryptGoogleToken = db.encryptGoogleToken || (value => value);
 
 async function resolveMeetTeacherContext({ req, studentId, sessionId, slotId }) {
     if (slotId) {
@@ -414,13 +415,13 @@ router.get('/api/calendar/callback', async (req, res, next) => {
         );
         const { tokens } = await oauth2Client.getToken(code);
         await db.query(
-            'UPDATE users SET calendar_access_token=$1, calendar_refresh_token=$2, calendar_token_expiry=$3 WHERE id=$4',
-            [tokens.access_token, tokens.refresh_token, tokens.expiry_date, userId]
+            'UPDATE users SET calendar_access_token=$1, calendar_refresh_token=COALESCE($2, calendar_refresh_token), calendar_token_expiry=$3 WHERE id=$4',
+            [encryptGoogleToken(tokens.access_token), encryptGoogleToken(tokens.refresh_token), tokens.expiry_date, userId]
         );
         console.log('[Calendar] Connected for user:', userId);
         res.redirect('/teacher/settings?calendar=connected');
     } catch (err) {
-        console.error('[Calendar] Callback error:', err.message);
+        console.error('[Calendar] OAuth callback failed');
         res.redirect('/teacher/settings?calendar=error');
     }
 });
@@ -433,6 +434,38 @@ router.get('/api/calendar/status', authenticateJWT, async (req, res, next) => {
         );
         const user = result.rows[0];
         res.json({ connected: !!user?.calendar_access_token });
+    } catch (err) {
+        next(err);
+    }
+});
+
+router.delete('/api/calendar/disconnect', authenticateJWT, requireTeacherOrAdmin, async (req, res, next) => {
+    try {
+        const result = await db.query(
+            'SELECT calendar_access_token, calendar_refresh_token FROM users WHERE id=$1',
+            [req.user.id]
+        );
+        const user = result.rows[0];
+        const token = user?.calendar_refresh_token || user?.calendar_access_token;
+        let revocation = token ? 'failed' : 'not_needed';
+        if (token) {
+            try {
+                const oauth2Client = new google.auth.OAuth2(
+                    process.env.GOOGLE_CLIENT_ID,
+                    process.env.GOOGLE_CLIENT_SECRET,
+                    (process.env.BASE_URL || '') + '/api/calendar/callback'
+                );
+                await oauth2Client.revokeToken(token);
+                revocation = 'revoked';
+            } catch {
+                console.warn('[Calendar] Grant revocation failed; clearing local credentials');
+            }
+        }
+        await db.query(
+            'UPDATE users SET calendar_access_token=NULL, calendar_refresh_token=NULL, calendar_token_expiry=NULL WHERE id=$1',
+            [req.user.id]
+        );
+        res.json({ success: true, revocation });
     } catch (err) {
         next(err);
     }

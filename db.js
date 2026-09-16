@@ -2,6 +2,65 @@ require('dotenv').config();
 const { Pool } = require('pg');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
+const crypto = require('crypto');
+
+const GOOGLE_TOKEN_PREFIX = 'gcm:v1:';
+const GOOGLE_TOKEN_FIELDS = [
+  'calendar_access_token',
+  'calendar_refresh_token',
+  'gmail_access_token',
+  'gmail_refresh_token'
+];
+const googleTokenSecret = process.env.GOOGLE_TOKEN_ENCRYPTION_KEY;
+if (!googleTokenSecret && process.env.NODE_ENV !== 'test') {
+  throw new Error('GOOGLE_TOKEN_ENCRYPTION_KEY is required outside isolated tests');
+}
+const googleTokenKey = crypto.createHash('sha256')
+  .update(googleTokenSecret || crypto.randomBytes(32))
+  .digest();
+
+function encryptGoogleToken(value) {
+  if (!value || value.startsWith(GOOGLE_TOKEN_PREFIX)) return value;
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', googleTokenKey, iv);
+  const encrypted = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()]);
+  return `${GOOGLE_TOKEN_PREFIX}${iv.toString('base64')}:${cipher.getAuthTag().toString('base64')}:${encrypted.toString('base64')}`;
+}
+
+function decryptGoogleToken(value) {
+  if (!value || !value.startsWith(GOOGLE_TOKEN_PREFIX)) return value;
+  const parts = value.split(':');
+  if (parts.length !== 5) throw new Error('Invalid encrypted Google token');
+  const decipher = crypto.createDecipheriv('aes-256-gcm', googleTokenKey, Buffer.from(parts[2], 'base64'));
+  decipher.setAuthTag(Buffer.from(parts[3], 'base64'));
+  return Buffer.concat([decipher.update(Buffer.from(parts[4], 'base64')), decipher.final()]).toString('utf8');
+}
+
+function decryptGoogleTokens(result) {
+  if (!result) return result;
+  const decryptRow = row => {
+    if (!row) return row;
+    for (const field of GOOGLE_TOKEN_FIELDS) {
+      if (Object.prototype.hasOwnProperty.call(row, field)) row[field] = decryptGoogleToken(row[field]);
+    }
+    return row;
+  };
+  if (Array.isArray(result)) return result.map(decryptRow);
+  if (Array.isArray(result.rows)) result.rows = result.rows.map(decryptRow);
+  else decryptRow(result);
+  return result;
+}
+
+function decryptCallback(callback) {
+  return (err, result) => {
+    if (err) return callback(err, result);
+    try {
+      return callback(null, decryptGoogleTokens(result));
+    } catch (decryptErr) {
+      return callback(decryptErr);
+    }
+  };
+}
 
 let pool;
 let sqliteDb;
@@ -185,13 +244,9 @@ const db = {
         params = [];
       }
 
-      if (isPostgres) {
-        const runner = createPostgresRunner(pool);
-        return runner.query(text, params, callback);
-      } else {
-        const runner = createSqliteRunner(sqliteDb);
-        return runner.query(text, params, callback);
-      }
+      const runner = isPostgres ? createPostgresRunner(pool) : createSqliteRunner(sqliteDb);
+      if (callback) return runner.query(text, params, decryptCallback(callback));
+      return runner.query(text, params).then(decryptGoogleTokens);
     } catch (outerErr) {
       console.error('DB OUTER ERROR:', outerErr.message);
       if (callback) callback(outerErr);
@@ -204,13 +259,9 @@ const db = {
         callback = params;
         params = [];
       }
-      if (isPostgres) {
-        const runner = createPostgresRunner(pool);
-        return runner.all(text, params, callback);
-      } else {
-        const runner = createSqliteRunner(sqliteDb);
-        return runner.all(text, params, callback);
-      }
+      const runner = isPostgres ? createPostgresRunner(pool) : createSqliteRunner(sqliteDb);
+      if (callback) return runner.all(text, params, decryptCallback(callback));
+      return runner.all(text, params).then(decryptGoogleTokens);
     } catch (err) {
       console.error('DB OUTER ERROR:', err.message);
       if (callback) callback(err);
@@ -223,13 +274,9 @@ const db = {
         callback = params;
         params = [];
       }
-      if (isPostgres) {
-        const runner = createPostgresRunner(pool);
-        return runner.get(text, params, callback);
-      } else {
-        const runner = createSqliteRunner(sqliteDb);
-        return runner.get(text, params, callback);
-      }
+      const runner = isPostgres ? createPostgresRunner(pool) : createSqliteRunner(sqliteDb);
+      if (callback) return runner.get(text, params, decryptCallback(callback));
+      return runner.get(text, params).then(decryptGoogleTokens);
     } catch (err) {
       console.error('DB OUTER ERROR:', err.message);
       if (callback) callback(err);
@@ -617,11 +664,11 @@ async function initDb() {
     "UPDATE teacher_payments SET paid = 1 WHERE status = 'paid' AND (paid IS NULL OR paid = 0)",
 
     // Gmail OAuth + transcript email columns on users
-    "ALTER TABLE users ADD COLUMN IF NOT EXISTS transcript_email VARCHAR(255)",
-    "ALTER TABLE users ADD COLUMN IF NOT EXISTS gmail_access_token TEXT",
-    "ALTER TABLE users ADD COLUMN IF NOT EXISTS gmail_refresh_token TEXT",
-    "ALTER TABLE users ADD COLUMN IF NOT EXISTS gmail_token_expiry BIGINT",
-    "ALTER TABLE users ADD COLUMN IF NOT EXISTS gmail_last_check TIMESTAMP",
+    "ALTER TABLE users ADD COLUMN transcript_email VARCHAR(255)",
+    "ALTER TABLE users ADD COLUMN gmail_access_token TEXT",
+    "ALTER TABLE users ADD COLUMN gmail_refresh_token TEXT",
+    "ALTER TABLE users ADD COLUMN gmail_token_expiry BIGINT",
+    "ALTER TABLE users ADD COLUMN gmail_last_check TIMESTAMP",
 
     // Onboarding wizard
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_completed BOOLEAN DEFAULT FALSE",
@@ -646,9 +693,9 @@ async function initDb() {
     "ALTER TABLE sessions ADD COLUMN IF NOT EXISTS meet_link TEXT",
 
     // Independent Google Calendar OAuth token columns (separate from Gmail)
-    "ALTER TABLE users ADD COLUMN IF NOT EXISTS calendar_access_token TEXT",
-    "ALTER TABLE users ADD COLUMN IF NOT EXISTS calendar_refresh_token TEXT",
-    "ALTER TABLE users ADD COLUMN IF NOT EXISTS calendar_token_expiry BIGINT",
+    "ALTER TABLE users ADD COLUMN calendar_access_token TEXT",
+    "ALTER TABLE users ADD COLUMN calendar_refresh_token TEXT",
+    "ALTER TABLE users ADD COLUMN calendar_token_expiry BIGINT",
 
     // Group sessions support
     "ALTER TABLE sessions ADD COLUMN IF NOT EXISTS session_type VARCHAR(20) DEFAULT 'individual'",
@@ -717,6 +764,30 @@ async function initDb() {
 
   for (const sql of migrations) {
     await runMigration(sql);
+  }
+
+  // One-time, idempotent upgrade of pre-encryption OAuth credentials.
+  const tokenRows = await db.query(
+    `SELECT id, calendar_access_token, calendar_refresh_token, gmail_access_token, gmail_refresh_token
+     FROM users
+     WHERE (calendar_access_token IS NOT NULL AND calendar_access_token NOT LIKE $1)
+        OR (calendar_refresh_token IS NOT NULL AND calendar_refresh_token NOT LIKE $1)
+        OR (gmail_access_token IS NOT NULL AND gmail_access_token NOT LIKE $1)
+        OR (gmail_refresh_token IS NOT NULL AND gmail_refresh_token NOT LIKE $1)`,
+    [`${GOOGLE_TOKEN_PREFIX}%`]
+  );
+  for (const user of tokenRows.rows || []) {
+    await db.query(
+      `UPDATE users SET calendar_access_token=$1, calendar_refresh_token=$2,
+       gmail_access_token=$3, gmail_refresh_token=$4 WHERE id=$5`,
+      [
+        encryptGoogleToken(user.calendar_access_token),
+        encryptGoogleToken(user.calendar_refresh_token),
+        encryptGoogleToken(user.gmail_access_token),
+        encryptGoogleToken(user.gmail_refresh_token),
+        user.id
+      ]
+    );
   }
 
   // ─── Índices de rendimiento ───────────────────────────────────────────────────
@@ -873,5 +944,7 @@ async function initDb() {
 
 db.initDb    = initDb;
 db.isPostgres = isPostgres;
+db.encryptGoogleToken = encryptGoogleToken;
+db.decryptGoogleToken = decryptGoogleToken;
 
 module.exports = db;

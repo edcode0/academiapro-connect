@@ -13,6 +13,7 @@ const { resolveTranscriptStudent } = require('./student-match');
 const { buildTranscriptAnalysisPrompt, buildTranscriptSummaryCard } = require('./transcript-format');
 
 const isPostgres = !!process.env.DATABASE_URL;
+const encryptGoogleToken = db.encryptGoogleToken || (value => value);
 
 // Bound DeepSeek token burn per run: a backlog of N emails must not be re-analyzed
 // in full on every 15-min tick (that exhausts the daily token quota in minutes).
@@ -64,7 +65,12 @@ module.exports = function makeGmailService(io) {
         oauth2Client.on('tokens', async (tokens) => {
             await db.query(
                 'UPDATE users SET gmail_access_token=$1, gmail_refresh_token=$2, gmail_token_expiry=$3 WHERE id=$4',
-                [tokens.access_token, tokens.refresh_token || teacher.gmail_refresh_token, tokens.expiry_date, teacher.id]
+                [
+                    encryptGoogleToken(tokens.access_token),
+                    encryptGoogleToken(tokens.refresh_token || teacher.gmail_refresh_token),
+                    tokens.expiry_date,
+                    teacher.id
+                ]
             ).catch(err => console.error('[OAuth] Gmail token persist failed:', err.message));
         });
 
