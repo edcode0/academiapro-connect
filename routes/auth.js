@@ -236,9 +236,10 @@ router.post('/api/auth/join', async (req, res, next) => {
 
         // Create user — role and academy_id come from DB, not client
         const hashedPassword = await bcrypt.hash(password, 10);
+        const userCode = generateUserCode();
         await db.query(
-            'INSERT INTO users (name, email, password_hash, role, academy_id) VALUES ($1, $2, $3, $4, $5)',
-            [name, email, hashedPassword, role, academy.id]
+            'INSERT INTO users (name, email, password_hash, role, academy_id, user_code) VALUES ($1, $2, $3, $4, $5, $6)',
+            [name, email, hashedPassword, role, academy.id, userCode]
         );
 
         const newUserResult = await db.query(
@@ -250,7 +251,9 @@ router.post('/api/auth/join', async (req, res, next) => {
             id: user.id,
             email: user.email,
             role: user.role,
-            academy_id: user.academy_id
+            academy_id: user.academy_id,
+            name: user.name,
+            user_code: user.user_code
         });
 
         console.log('User joined: id=%d role=%s academy=%d', user.id, user.role, academy.id);

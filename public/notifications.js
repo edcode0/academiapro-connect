@@ -45,12 +45,8 @@
     }
 
     async function loadNotifications() {
-        const token = localStorage.getItem('token');
-        if (!token) return;
         try {
-            const res = await fetch('/api/notifications', {
-                headers: { 'Authorization': 'Bearer ' + token }
-            });
+            const res = await fetch('/api/notifications', { credentials: 'include' });
             if (!res.ok) return;
             const all = await res.json();
             renderNotifications(all.slice(0, 10));
@@ -96,10 +92,9 @@
     };
 
     window._markNotifRead = async function (id, event) {
-        const token = localStorage.getItem('token');
         await fetch(`/api/notifications/mark-read/${id}`, {
             method: 'POST',
-            headers: { 'Authorization': 'Bearer ' + token }
+            credentials: 'include'
         }).catch(() => {});
         const item = event.currentTarget;
         item.classList.remove('unread');
@@ -112,10 +107,9 @@
     };
 
     window.markAllNotifRead = async function () {
-        const token = localStorage.getItem('token');
         await fetch('/api/notifications/mark-all-read', {
             method: 'POST',
-            headers: { 'Authorization': 'Bearer ' + token }
+            credentials: 'include'
         }).catch(() => {});
         document.querySelectorAll('.notif-item.unread').forEach(el => el.classList.remove('unread'));
         const badge = document.getElementById('notifBadge');
@@ -134,10 +128,8 @@
     // Socket.IO real-time push (if socket.io client is loaded)
     function connectSocket() {
         if (typeof io === 'undefined') return;
-        const token = localStorage.getItem('token');
-        if (!token) return;
         try {
-            const sock = io({ auth: { token } });
+            const sock = io({ withCredentials: true });
             sock.on('new_notification', function () {
                 loadNotifications();
             });

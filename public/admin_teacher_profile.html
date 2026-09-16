@@ -792,14 +792,8 @@
         const MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
         async function init() {
-            await loadUser();
             await loadTeacherData();
             setDefaultMonth();
-        }
-
-        async function loadUser() {
-            const res = await fetch('/auth/me');
-            if (res.ok) { const u = await res.json(); document.getElementById('userNameInSidebar').textContent = u.name; }
         }
 
         function setDefaultMonth() {

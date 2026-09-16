@@ -454,6 +454,8 @@
                     </select>
                 </div>
 
+                <input type="hidden" id="configPdfText" value="">
+
                 <button class="btn btn-primary" style="width:100%; justify-content: center; margin-top: 1rem;"
                     onclick="generateExam()">
                     ⚡ Mente brillante, ¡Generar Examen!
@@ -505,6 +507,19 @@
         let studentData = null;
         let currentExam = null;
         let userAnswers = []; // store answers for grading
+
+        function showLoading(message) {
+            const overlay = document.getElementById('loadingOverlay');
+            if (!overlay) return;
+            const text = overlay.querySelector('h3');
+            if (text && message) text.textContent = message;
+            overlay.style.display = 'flex';
+        }
+
+        function hideLoading() {
+            const overlay = document.getElementById('loadingOverlay');
+            if (overlay) overlay.style.display = 'none';
+        }
 
         let timerInterval;
         let secondsElapsed = 0;

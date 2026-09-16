@@ -572,16 +572,7 @@
             const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#f97316'];
 
             async function init() {
-                await loadUser();
                 await loadTeachers();
-            }
-
-            async function loadUser() {
-                const res = await fetch('/auth/me');
-                if (res.ok) {
-                    const user = await res.json();
-                    document.getElementById('userNameInSidebar').textContent = user.name;
-                }
             }
 
             async function loadTeachers() {
