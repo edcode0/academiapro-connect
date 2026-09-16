@@ -588,17 +588,6 @@
         let profileExams = [];
 
         async function init() {
-            const userRes = await fetch('/auth/me');
-            const user = await userRes.json();
-            document.getElementById('sidebarName').textContent = user.name;
-            document.getElementById('sidebar-code').textContent = user.user_code || 'No asignado';
-
-            // If admin, show full admin two-section nav and ADMIN badge
-            if (user.role === 'admin') {
-                document.querySelector('aside .role-tag').textContent = 'ADMIN';
-                document.getElementById('mainNav').innerHTML = window.renderSidebarNavHTML('admin');
-            }
-
             // Auto-highlight active link
             const path = window.location.pathname;
             document.querySelectorAll('#mainNav a').forEach(a => {

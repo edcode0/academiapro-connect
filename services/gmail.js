@@ -9,6 +9,8 @@ const {
 } = require('./homework-reminders');
 const { createNotification } = require('../notifications');
 const { makeOAuth2Client }   = require('./calendar');
+const { resolveTranscriptStudent } = require('./student-match');
+const { buildTranscriptAnalysisPrompt, buildTranscriptSummaryCard } = require('./transcript-format');
 
 const isPostgres = !!process.env.DATABASE_URL;
 
@@ -209,7 +211,7 @@ module.exports = function makeGmailService(io) {
                         model:    'deepseek-v4-flash',
                         messages: [{
                             role:    'user',
-                            content: `Analiza esta transcripción de clase y genera un resumen estructurado.\n\nAlumnos posibles: ${studentNames}\n\nTranscripción:\n${body.substring(0, 8000)}\n\nResponde SOLO en JSON con este formato exacto:\n{\n  "student_name": "nombre del alumno identificado o más probable",\n  "resumen": "Resumen de lo tratado en clase en 2-3 frases",\n  "conceptos_clave": ["concepto 1", "concepto 2"],\n  "deberes": ["tarea 1", "tarea 2"],\n  "pistas_profesor": ["consejo o observación del profesor 1"],\n  "proximos_pasos": ["próximo tema 1"],\n  "mensaje_motivador": "Mensaje corto de ánimo para el alumno"\n}`
+                            content: buildTranscriptAnalysisPrompt({ transcriptText: body.substring(0, 8000), studentNames })
                         }],
                         max_tokens:      1000,
                         temperature:     0.3,
@@ -239,29 +241,35 @@ module.exports = function makeGmailService(io) {
                     analysisData.google_transcript_url = recordingLink;
                 }
 
-                // Match student by the most recent booked slot, falling back to an exact name match.
+                // Match student by booked slots in the lookup window, falling back to an
+                // exact name match. Several students booked in the same window (normal for
+                // a teacher with back-to-back classes) is ambiguous — resolveTranscriptStudent
+                // disambiguates by exact name, then by which class just finished relative to
+                // the email, and only trusts a single candidate if the AI name doesn't
+                // contradict it.
                 const toMadridNaive = ms => new Date(ms)
                     .toLocaleString('sv-SE', { timeZone: 'Europe/Madrid' })
                     .replace(' ', 'T');
                 const emailDate = toMadridNaive(emailMs);
                 const windowStart = toMadridNaive(emailMs - 6 * 60 * 60 * 1000);
-                const slotMatch = await db.query(
-                    `SELECT student_id FROM available_slots
+                const slotMatches = await db.query(
+                    `SELECT student_id, start_datetime, end_datetime FROM available_slots
                      WHERE teacher_id = $1 AND is_booked = TRUE AND student_id IS NOT NULL
-                       AND start_datetime <= $2 AND start_datetime >= $3
-                     ORDER BY start_datetime DESC LIMIT 1`,
+                       AND start_datetime <= $2 AND start_datetime >= $3`,
                     [teacher.id, emailDate, windowStart]
                 );
-                const slotStudentId = (slotMatch.rows || [])[0]?.student_id;
-                const slotStudent = slotStudentId ? students.find(s => s.id === slotStudentId) : null;
+                const candidateSlots = (slotMatches.rows || []).map(r => ({
+                    studentId: r.student_id,
+                    startDatetime: r.start_datetime,
+                    endDatetime: r.end_datetime
+                }));
 
-                let exactMatch = slotStudent;
-                if (!exactMatch) {
-                    const nameToMatch = (analysisData.student_name || '').trim().toLowerCase();
-                    exactMatch = nameToMatch.length >= 2
-                        ? students.find(s => s.name.trim().toLowerCase() === nameToMatch)
-                        : null;
-                }
+                const exactMatch = resolveTranscriptStudent({
+                    candidateSlots,
+                    students,
+                    aiGuessedName: analysisData.student_name,
+                    emailArrivalNaive: emailDate
+                });
 
                 if (!exactMatch) {
                     console.warn(`[Gmail] No student match for student_name="${analysisData.student_name}" — saving as pending`);
@@ -310,14 +318,7 @@ module.exports = function makeGmailService(io) {
                 let roomId = (roomResult.rows || [])[0]?.id;
 
                 // Build and save chat message
-                const d = analysisData;
-                const chatMessage =
-                    `📚 *Resumen de tu clase*\n\n${d.resumen || d.summary || ''}\n\n` +
-                    `📝 *Deberes:*\n${(d.deberes || d.homework || []).map(x => '• ' + x).join('\n') || '• Sin deberes'}\n\n` +
-                    `💡 *Conceptos:*\n${(d.conceptos_clave || d.topics_covered || []).map(x => '• ' + x).join('\n')}\n\n` +
-                    `🎯 *Consejos:*\n${(d.pistas_profesor || d.key_points || []).map(x => '• ' + x).join('\n')}\n\n` +
-                    `💪 ${d.mensaje_motivador || d.teacher_notes || ''}` +
-                    (recordingLink ? `\n\n🎥 *Grabación de la clase:*\n${recordingLink}` : '');
+                const chatMessage = buildTranscriptSummaryCard(analysisData, recordingLink);
 
                 const transactionResult = await db.withTransaction(async tx => {
                     if (!roomId) {
@@ -337,9 +338,9 @@ module.exports = function makeGmailService(io) {
 
                     await tx.query(
                         isPostgres
-                            ? `INSERT INTO messages (room_id, sender_id, academy_id, content, created_at) VALUES ($1, $2, $3, $4, NOW())`
-                            : `INSERT INTO messages (room_id, sender_id, academy_id, content, created_at) VALUES ($1, $2, $3, $4, datetime('now'))`,
-                        [roomId, teacher.id, teacher.academy_id, chatMessage]
+                            ? `INSERT INTO messages (room_id, sender_id, academy_id, content, type, created_at) VALUES ($1, $2, $3, $4, $5, NOW())`
+                            : `INSERT INTO messages (room_id, sender_id, academy_id, content, type, created_at) VALUES ($1, $2, $3, $4, $5, datetime('now'))`,
+                        [roomId, teacher.id, teacher.academy_id, chatMessage, 'html_card']
                     );
 
                     const transcriptInsert = await tx.query(
@@ -391,6 +392,7 @@ module.exports = function makeGmailService(io) {
                     sender_name: teacher.name,
                     sender_role: 'teacher',
                     content:     chatMessage,
+                    type:        'html_card',
                     created_at:  new Date().toISOString()
                 });
 

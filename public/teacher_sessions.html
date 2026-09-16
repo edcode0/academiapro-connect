@@ -653,14 +653,6 @@
         async function init() {
             const userRes = await fetch('/auth/me');
             teacherUser = await userRes.json();
-            document.getElementById('sidebarName').textContent = teacherUser.name;
-            document.getElementById('sidebar-code').textContent = teacherUser.user_code || 'No asignado';
-
-            // If admin, show full admin two-section nav and ADMIN badge
-            if (teacherUser.role === 'admin') {
-                document.querySelector('aside .role-tag').textContent = 'ADMIN';
-                document.getElementById('mainNav').innerHTML = window.renderSidebarNavHTML('admin');
-            }
 
             // Auto-highlight active link
             const path = window.location.pathname;

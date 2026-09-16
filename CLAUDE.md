@@ -75,7 +75,7 @@ El objetivo: que la próxima sesión arranque con contexto preciso sin explorar 
 ```
 routes/          → 13 routers (auth, students, teachers, sessions, payments, exams,
                                calendar, chat, ai, notifications, reports, settings, transcripts)
-services/        → groq, email, calendar, gmail, risk, rooms
+services/        → groq, email, calendar, gmail, risk, rooms, transcript-format (prompt+tarjeta compartidos), student-match (desambiguación transcripción↔alumno)
 middleware/      → auth.js (authenticateJWT), roles.js (requireAdmin, requireTeacher, etc.)
 utils/           → multer.js, codes.js
 sockets/         → chat.js (socket handler extraído de index.js)

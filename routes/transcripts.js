@@ -14,6 +14,7 @@ const {
     createHomeworkReminderFromTranscript,
     buildHomeworkReminderPrompt
 } = require('../services/homework-reminders');
+const { buildTranscriptAnalysisPrompt, buildTranscriptSummaryCard } = require('../services/transcript-format');
 const { pdfUpload }          = require('../utils/multer');
 const { authenticateJWT }    = require('../middleware/auth');
 const { requireAdmin, requireTeacherOrAdmin } = require('../middleware/roles');
@@ -210,19 +211,7 @@ module.exports = function makeTranscriptsRouter(io) {
             // Truncate to ~12 000 chars to stay well within token limits
             const transcriptForAI = transcript_text.substring(0, 12000);
 
-            const prompt = `Analiza esta transcripción de clase y genera un resumen estructurado.
-Responde en JSON con este formato exacto (sin Markdown extra):
-{
-  "resumen": "Resumen breve de la clase en 2-3 frases",
-  "conceptos_clave": ["concepto 1", "concepto 2"],
-  "deberes": ["tarea 1", "tarea 2"],
-  "pistas_profesor": ["pista o consejo 1", "pista 2"],
-  "proximos_pasos": ["paso 1", "paso 2"],
-  "mensaje_motivador": "Mensaje corto de ánimo personalizado para el alumno"
-}
-
-Transcripción:
-${transcriptForAI}`;
+            const prompt = buildTranscriptAnalysisPrompt({ transcriptText: transcriptForAI });
 
             let apiResponse;
             try {
@@ -314,18 +303,9 @@ ${transcriptForAI}`;
                 s = { resumen: String(summary), deberes: [], conceptos_clave: [], pistas_profesor: [], mensaje_motivador: '' };
             }
 
-            const messageText = `📚 *Resumen de tu clase de hoy*\n\n${s.resumen || ''}\n\n` +
-                `📝 *Deberes para casa:*\n${(s.deberes || []).map(d => '• ' + d).join('\n')}\n\n` +
-                `💡 *Conceptos importantes:*\n${(s.conceptos_clave || []).map(c => '• ' + c).join('\n')}\n\n` +
-                `🎯 *Consejos de tu profe:*\n${(s.pistas_profesor || []).map(p => '• ' + p).join('\n')}\n\n` +
-                `💪 ${s.mensaje_motivador || ''}`;
+            const messageText = buildTranscriptSummaryCard(s, s.google_transcript_url || null);
 
             // Step 4: Save message
-            const insertMsgSql = isPostgres
-                ? `INSERT INTO messages (room_id, sender_id, content, academy_id, read, created_at)
-                   VALUES ($1, $2, $3, $4, FALSE, NOW())`
-                : `INSERT INTO messages (room_id, sender_id, content, academy_id, read, created_at)
-                   VALUES ($1, $2, $3, $4, 0, datetime('now'))`;
             const insertHtmlMsgSql = isPostgres
                 ? `INSERT INTO messages (room_id, sender_id, content, academy_id, read, type, created_at)
                    VALUES ($1, $2, $3, $4, FALSE, $5, NOW())`
@@ -355,7 +335,7 @@ ${transcriptForAI}`;
                     await tx.query(insertMemberSql, [roomId, studentUserId]);
                 }
 
-                await tx.query(insertMsgSql, [roomId, sender_id, messageText, academy_id]);
+                await tx.query(insertHtmlMsgSql, [roomId, sender_id, messageText, academy_id, 'html_card']);
 
                 const reminder = await createHomeworkReminderFromTranscript({
                     academyId: academy_id,
@@ -385,6 +365,7 @@ ${transcriptForAI}`;
                 sender_id: sender_id,
                 sender_name: senderRows[0]?.name || 'Profesor',
                 content: messageText,
+                type: 'html_card',
                 created_at: new Date().toISOString()
             });
 

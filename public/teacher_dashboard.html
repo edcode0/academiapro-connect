@@ -504,10 +504,6 @@
         async function loadTeacherProfile() {
             const user = JSON.parse(localStorage.getItem('user') || '{}');
 
-            // Set name immediately from localStorage
-            document.getElementById('teacher-name').textContent = user.name || 'Profesor';
-            document.getElementById('teacher-role-badge').textContent = user.role === 'admin' ? 'ADMIN' : 'PROFESOR';
-
             // Fetch full profile from API
             try {
                 const response = await fetch('/api/teacher/profile', {
@@ -515,8 +511,8 @@
                 });
                 if (response.ok) {
                     const data = await response.json();
-                    document.getElementById('teacher-name').textContent = data.name;
-                    document.getElementById('teacher-code').textContent = 'Código: ' + (data.code || 'N/A');
+                    const codeEl = document.getElementById('teacher-code');
+                    if (codeEl) codeEl.textContent = 'Código: ' + (data.code || 'N/A');
                     const firstName = (data.name || user.name || 'Profesor').split(' ')[0];
                     document.getElementById('welcomeText').textContent = `¡Hola, ${firstName}! 👋`;
                 }
@@ -591,12 +587,6 @@
 
         async function init() {
             await loadTeacherProfile();
-
-            // If admin, replace teacher-only nav with full admin two-section nav
-            const _u = JSON.parse(localStorage.getItem('user') || '{}');
-            if (_u.role === 'admin') {
-                document.getElementById('mainNav').innerHTML = window.renderSidebarNavHTML('admin');
-            }
 
             // Highlight active sidebar link
             const path = window.location.pathname;

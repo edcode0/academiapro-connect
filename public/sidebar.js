@@ -150,14 +150,53 @@
         </aside>`;
     }
 
+    // Real per-user name/code the static ROLES markup can't know ahead of time
+    // (the role/badge text itself is already correct in each ROLES.*.userInfo
+    // once the right config is picked, so only name+code need filling here).
+    function fillUserInfo(role, user) {
+        const nameId = { admin: 'userName', teacher: 'teacher-name', student: 'sidebar-name' }[role];
+        const codeId = { teacher: 'teacher-code', student: 'sidebar-code' }[role];
+        if (nameId && user.name) {
+            const el = document.getElementById(nameId);
+            if (el) el.textContent = user.name;
+        }
+        if (codeId) {
+            const el = document.getElementById(codeId);
+            if (el) el.textContent = user.user_code || user.code || '---';
+        }
+    }
+
+    function replaceAside(current, role) {
+        const wrap = document.createElement('div');
+        wrap.innerHTML = render(role).trim();
+        const next = wrap.firstElementChild;
+        current.replaceWith(next);
+        setSidebarCollapsed(document.body.classList.contains('sidebar-collapsed'));
+        return next;
+    }
+
     function mount() {
         const el = document.getElementById('sidebar-mount');
         if (!el) return;
-        el.outerHTML = render(el.getAttribute('data-role') || 'admin');
-        setSidebarCollapsed(document.body.classList.contains('sidebar-collapsed'));
+        // data-role only picks the instant-paint shell (avoids a flash on the
+        // common case where it already matches the logged-in user); the real
+        // session role from /auth/me is the actual source of truth and wins
+        // whenever a page (e.g. an admin browsing their own /teacher/* pages)
+        // guessed wrong.
+        const paintedRole = el.getAttribute('data-role') || 'admin';
+        let asideEl = replaceAside(el, paintedRole);
+
+        fetch('/auth/me', { credentials: 'include' })
+            .then(res => res.ok ? res.json() : null)
+            .then(user => {
+                if (!user || !user.role) return;
+                const realRole = user.role === 'admin' ? 'admin' : (user.role === 'teacher' ? 'teacher' : 'student');
+                if (realRole !== paintedRole) asideEl = replaceAside(asideEl, realRole);
+                fillUserInfo(realRole, user);
+            })
+            .catch(() => { /* offline/unauthenticated: keep the instant-paint shell */ });
     }
 
-    window.renderSidebarNavHTML = renderSidebarNavHTML;
     window.toggleSidebarCollapse = toggleSidebarCollapse;
     window.iconSvg = iconSvg;
 

@@ -763,22 +763,6 @@
 
         // ── Init ──────────────────────────────────────────────────
         document.addEventListener('DOMContentLoaded', async function () {
-            // Sidebar init
-            try {
-                const userRes = await fetch('/auth/me', { credentials: 'include' });
-                if (userRes.ok) {
-                    const user = await userRes.json();
-                    document.getElementById('sidebarName').textContent = user.name;
-                    document.getElementById('sidebar-code').textContent = user.user_code || 'No asignado';
-
-                    // If admin, show full admin two-section nav and ADMIN badge
-                    if (user.role === 'admin') {
-                        document.querySelector('aside .role-tag').textContent = 'ADMIN';
-                        document.getElementById('mainNav').innerHTML = window.renderSidebarNavHTML('admin');
-                    }
-                }
-            } catch (e) { }
-
             // Active nav link
             const path = window.location.pathname;
             document.querySelectorAll('#mainNav a').forEach(a => {

@@ -367,14 +367,8 @@
             if (!userRes.ok) return window.location.href = '/login';
             const user = await userRes.json();
 
-            // Sidebar
-            document.getElementById('sidebarName').textContent = user.name;
-
-            // If admin, show full admin two-section nav and ADMIN badge
+            // Profile role display in main content (sidebar itself is handled by sidebar.js)
             if (user.role === 'admin') {
-                document.querySelector('aside .role-tag').textContent = 'ADMIN';
-                document.getElementById('mainNav').innerHTML = window.renderSidebarNavHTML('admin');
-                // Also update the profile role display in main content
                 document.querySelectorAll('.role-tag').forEach(el => el.textContent = 'ADMIN');
             }
 
