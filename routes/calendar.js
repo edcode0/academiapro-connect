@@ -10,6 +10,7 @@ const { authenticateJWT, JWT_SECRET } = require('../middleware/auth');
 const { requireStudent, requireTeacherOrAdmin } = require('../middleware/roles');
 
 const isPostgres = db.isPostgres;
+const OAUTH_STATE_MAX_AGE_MS = 15 * 60 * 1000;
 
 async function resolveMeetTeacherContext({ req, studentId, sessionId, slotId }) {
     if (slotId) {
@@ -386,13 +387,21 @@ router.get('/api/calendar/callback', async (req, res, next) => {
         let userId;
         try {
             const parsed = JSON.parse(Buffer.from(rawState, 'base64').toString());
+            if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) ||
+                Object.keys(parsed).length !== 2 || typeof parsed.d !== 'string' || typeof parsed.s !== 'string') {
+                throw new Error('Invalid state structure');
+            }
             const expectedSig = crypto.createHmac('sha256', JWT_SECRET).update(parsed.d).digest('hex').substring(0, 16);
             if (parsed.s !== expectedSig) throw new Error('Invalid state signature');
-            const [stateUserId, , issuedAt] = parsed.d.split(':');
-            const stateAge = Date.now() - Number(issuedAt);
-            if (!Number.isFinite(stateAge) || stateAge > 15 * 60 * 1000) throw new Error('Expired state');
-            userId = stateUserId;
-            if (!userId || isNaN(Number(userId))) throw new Error('Invalid userId in state');
+            const parts = parsed.d.split(':');
+            if (parts.length !== 3 || !/^[1-9]\d*$/.test(parts[0]) || !/^[0-9a-f]{16}$/.test(parts[1]) || !/^\d+$/.test(parts[2])) {
+                throw new Error('Invalid state data');
+            }
+            userId = Number(parts[0]);
+            const issuedAt = Number(parts[2]);
+            const stateAge = Date.now() - issuedAt;
+            if (!Number.isSafeInteger(userId) || !Number.isSafeInteger(issuedAt) ||
+                stateAge < 0 || stateAge > OAUTH_STATE_MAX_AGE_MS) throw new Error('Invalid state age');
         } catch (e) {
             console.error('[Calendar] Invalid state:', e.message);
             return res.redirect('/teacher/settings?calendar=error');
