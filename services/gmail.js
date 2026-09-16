@@ -408,13 +408,6 @@ module.exports = function makeGmailService(io) {
                     });
                 }
 
-                // Mark email as read
-                await gmail.users.messages.modify({
-                    userId:      'me',
-                    id:          msg.id,
-                    requestBody: { removeLabelIds: ['UNREAD'] }
-                });
-
                 processed++;
                 console.log(`[Gmail] Processed transcript for student ${student.name}`);
             } catch (err) {

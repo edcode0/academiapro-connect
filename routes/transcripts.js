@@ -64,17 +64,14 @@ module.exports = function makeTranscriptsRouter(io) {
     router.get('/api/gmail/connect', authenticateJWT, requireTeacherOrAdmin, (req, res, next) => {
         const oauth2Client = makeOAuth2Client();
         const nonce = crypto.randomBytes(8).toString('hex');
-        const stateData = `${req.user.id}:${nonce}`;
+        const stateData = `${req.user.id}:${nonce}:${Date.now()}`;
         const sig = crypto.createHmac('sha256', JWT_SECRET).update(stateData).digest('hex').substring(0, 16);
         const signedState = Buffer.from(JSON.stringify({ d: stateData, s: sig })).toString('base64');
         const authUrl = oauth2Client.generateAuthUrl({
             access_type: 'offline',
             prompt: 'consent',
             scope: [
-                'https://www.googleapis.com/auth/gmail.readonly',
-                'https://www.googleapis.com/auth/gmail.modify',
-                'https://www.googleapis.com/auth/calendar',
-                'https://www.googleapis.com/auth/calendar.events'
+                'https://www.googleapis.com/auth/gmail.readonly'
             ],
             state: signedState
         });
@@ -89,7 +86,10 @@ module.exports = function makeTranscriptsRouter(io) {
                 const parsed = JSON.parse(Buffer.from(rawState, 'base64').toString());
                 const expectedSig = crypto.createHmac('sha256', JWT_SECRET).update(parsed.d).digest('hex').substring(0, 16);
                 if (parsed.s !== expectedSig) throw new Error('Invalid state signature');
-                userId = parsed.d.split(':')[0];
+                const [stateUserId, , issuedAt] = parsed.d.split(':');
+                const stateAge = Date.now() - Number(issuedAt);
+                if (!Number.isFinite(stateAge) || stateAge > 15 * 60 * 1000) throw new Error('Expired state');
+                userId = stateUserId;
                 if (!userId || isNaN(Number(userId))) throw new Error('Invalid userId in state');
             } catch (e) {
                 console.error('[Gmail] Invalid state:', e.message);
