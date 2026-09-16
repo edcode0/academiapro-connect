@@ -76,7 +76,7 @@ The first Android release is an access app for academies that already have a sub
 Evidence and current contradiction:
 
 - `docs/billing-roadmap.md:3,9-11,23,65-67` says Stripe is not implemented, plans/prices are not final, Android purchase is excluded from v1, and future contracting/payment belongs on the web.
-- `public/landing.html:779-788` advertises Stripe as an existing integration.
+- `public/landing.html` now presents pricing as not yet defined and removes the old Stripe/logo claim; deploy and verify the updated landing page.
 - `public/landing.html:864-947` advertises fixed Free/Pro/Academia tiers, €29/€59 monthly pricing, annual savings, limits, and purchase-oriented calls to action.
 - `public/terms.html` now states that Stripe, definitive plans/prices, and in-app Android purchases are not implemented.
 
@@ -186,7 +186,7 @@ No credential values were copied into this document.
 | P1 | Public support page missing and mailbox delivery unverified | publish branded HTTPS support and complete a controlled receive/reply test for `hola@academiapro.academy` |
 | P1 | OAuth disconnect controls not yet verified in deployment | exercise both controls on the deployed build and confirm local cleanup plus Google revocation |
 | P1 | Uploaded-file deletion not implemented/proven | define and test removal of account-owned attachments from persistent storage before making a broader deletion claim |
-| P2 | Deployment documentation still refers to Groq | align it with the actual DeepSeek configuration |
+| P2 | Legacy Groq naming remains in internal identifiers/tests | keep it out of user-facing documentation and rename only in a separate low-risk cleanup |
 
 ## Required input before continuing
 

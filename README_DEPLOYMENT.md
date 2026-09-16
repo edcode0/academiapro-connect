@@ -11,7 +11,7 @@ Debes configurar las siguientes variables en la sección **Settings -> Variables
 
 *   `DATABASE_URL`: (Se añade automáticamente al conectar el plugin de PostgreSQL)
 *   `JWT_SECRET`: Una cadena aleatoria larga (ej: `7f9e8d6c5b4a3f2...`)
-*   `GROQ_API_KEY`: Tu clave de API de Groq para la generación de informes con IA.
+*   `DEEPSEEK_API_KEY`: Tu clave de API de DeepSeek para el Tutor IA, informes y análisis de transcripciones.
 *   `RESEND_API_KEY`: Tu clave de API de Resend para el envío de correos.
 *   `GOOGLE_CLIENT_ID`: ID de cliente para Google OAuth.
 *   `GOOGLE_CLIENT_SECRET`: Secreto de cliente para Google OAuth.
