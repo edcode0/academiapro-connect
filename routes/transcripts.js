@@ -136,21 +136,23 @@ module.exports = function makeTranscriptsRouter(io) {
     });
 
     router.delete('/api/gmail/disconnect', authenticateJWT, requireTeacherOrAdmin, async (req, res, next) => {
+        let revocation = 'not_needed';
         try {
-            const result = await db.query(
-                'SELECT gmail_access_token, gmail_refresh_token FROM users WHERE id=$1',
-                [req.user.id]
-            );
-            const user = result.rows[0];
-            const token = user?.gmail_refresh_token || user?.gmail_access_token;
-            let revocation = token ? 'failed' : 'not_needed';
-            if (token) {
-                try {
+            try {
+                const result = await db.query(
+                    'SELECT gmail_access_token, gmail_refresh_token FROM users WHERE id=$1',
+                    [req.user.id]
+                );
+                const user = result.rows[0];
+                const token = user?.gmail_refresh_token || user?.gmail_access_token;
+                revocation = token ? 'failed' : 'not_needed';
+                if (token) {
                     await makeOAuth2Client().revokeToken(token);
                     revocation = 'revoked';
-                } catch {
-                    console.warn('[Gmail] Grant revocation failed; clearing local credentials');
                 }
+            } catch {
+                revocation = 'failed';
+                console.warn('[Gmail] Grant could not be read or revoked; clearing local credentials');
             }
             await db.query(
                 'UPDATE users SET gmail_access_token=NULL, gmail_refresh_token=NULL, gmail_token_expiry=NULL WHERE id=$1',

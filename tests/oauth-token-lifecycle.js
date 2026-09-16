@@ -10,9 +10,9 @@ const { spawnSync } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..');
 const JWT_SECRET = 'oauth-lifecycle-state-secret';
-process.env.NODE_ENV = 'test';
-process.env.JWT_SECRET = JWT_SECRET;
-process.env.GOOGLE_TOKEN_ENCRYPTION_KEY = 'oauth-lifecycle-encryption-secret';
+process.env.NODE_ENV ||= 'test';
+process.env.JWT_SECRET ||= JWT_SECRET;
+process.env.GOOGLE_TOKEN_ENCRYPTION_KEY ||= 'oauth-lifecycle-encryption-secret';
 
 function loadWithMocks(targetPath, mocks, initialize = loaded => loaded) {
     delete require.cache[require.resolve(targetPath)];
@@ -83,11 +83,17 @@ function encryptedDb(query) {
     };
 }
 
-function loadCalendarRouter({ query, revokeToken = async () => {} }) {
+function loadCalendarRouter({
+    query,
+    revokeToken = async () => {},
+    getTokenError = null,
+    calendarApi = () => ({})
+}) {
     const harness = createRouterHarness();
     class OAuth2 {
         generateAuthUrl() { return 'https://accounts.google.test/auth'; }
         async getToken() {
+            if (getTokenError) throw getTokenError;
             return { tokens: { access_token: 'calendar-access-secret', refresh_token: 'calendar-refresh-secret', expiry_date: 123 } };
         }
         async revokeToken(token) { return revokeToken(token); }
@@ -95,15 +101,56 @@ function loadCalendarRouter({ query, revokeToken = async () => {} }) {
     loadWithMocks(path.join(ROOT, 'routes/calendar.js'), {
         express: harness.express,
         '../db': encryptedDb(query),
-        googleapis: { google: { auth: { OAuth2 }, calendar: () => ({}) } },
+        googleapis: { google: { auth: { OAuth2 }, calendar: calendarApi } },
         '../services/calendar': {
-            makeOAuth2Client: () => ({}), createCalendarEvent: async () => null, deleteCalendarEvent: async () => {}
+            makeOAuth2Client: () => ({}),
+            makeCalendarOAuth2Client: () => ({}),
+            clearCalendarTokens: async userId => query(
+                'UPDATE users SET calendar_access_token=NULL, calendar_refresh_token=NULL, calendar_token_expiry=NULL WHERE id=$1',
+                [userId]
+            ),
+            clearCalendarOnInvalidGrant: async (err, user) => {
+                if (!/invalid_grant/i.test(err?.message || '')) return false;
+                const userId = typeof user === 'object' ? user.id : user;
+                if (userId) await query(
+                    'UPDATE users SET calendar_access_token=NULL, calendar_refresh_token=NULL, calendar_token_expiry=NULL WHERE id=$1',
+                    [userId]
+                );
+                return true;
+            },
+            createCalendarEvent: async () => null,
+            deleteCalendarEvent: async () => {}
         },
         '../middleware/auth': { authenticateJWT: noopMiddleware, JWT_SECRET },
         '../middleware/roles': { requireStudent: noopMiddleware, requireTeacherOrAdmin: noopMiddleware },
         '../services/recurring': { generateRecurringSlots: async () => {} }
     });
     return harness.routes;
+}
+
+function loadCalendarService({ query, insertError = null, deleteError = null }) {
+    let tokenHandler;
+    const oauth = {
+        setCredentials() {},
+        on(event, handler) { if (event === 'tokens') tokenHandler = handler; }
+    };
+    const calendarApi = { events: {
+        async insert() {
+            if (insertError) throw insertError;
+            return { data: { id: 'event-1', conferenceData: { entryPoints: [] } } };
+        },
+        async delete() {
+            if (deleteError) throw deleteError;
+        }
+    } };
+    const service = loadWithMocks(path.join(ROOT, 'services/calendar.js'), {
+        '../db': encryptedDb(query),
+        googleapis: { google: {
+            auth: { OAuth2: function OAuth2() { return oauth; } },
+            calendar: () => calendarApi
+        } }
+    });
+    return { service, getTokenHandler: () => tokenHandler };
 }
 
 function loadGmailRouter({ query, revokeToken = async () => {}, checkTranscripts = async () => 0 }) {
@@ -202,6 +249,17 @@ async function testAuthenticatedEncryptionRoundTrip() {
     parts[4] = bytes.toString('base64');
     const tampered = parts.join(':');
     assert.throws(() => realDb.decryptGoogleToken(tampered));
+
+    const wrongKeyScript = `
+        process.env.NODE_ENV='test';
+        process.env.GOOGLE_TOKEN_ENCRYPTION_KEY='different-key';
+        const db=require(${JSON.stringify(path.join(ROOT, 'db.js'))});
+        try { db.decryptGoogleToken(${JSON.stringify(ciphertext)}); process.exit(1); }
+        catch { process.exit(0); }
+    `;
+    const wrongKey = spawnSync(process.execPath, ['-e', wrongKeyScript], { cwd: ROOT, encoding: 'utf8' });
+    assert.strictEqual(wrongKey.status, 0, wrongKey.stderr);
+    assert.ok(!`${wrongKey.stdout}${wrongKey.stderr}`.includes('access-token-secret'));
 }
 
 async function testProductionRequiresEncryptionKey() {
@@ -292,6 +350,152 @@ async function testRefreshPersistsCiphertext() {
     assert.ok(!write.params.includes('refreshed-access'));
 }
 
+async function testCalendarRefreshPersistsCiphertext() {
+    const writes = [];
+    const { service, getTokenHandler } = loadCalendarService({
+        query: async (sql, params = []) => { writes.push({ sql, params }); return { rows: [] }; }
+    });
+    await service.createCalendarEvent({
+        id: 8,
+        calendar_access_token: 'old-calendar-access',
+        calendar_refresh_token: 'old-calendar-refresh',
+        calendar_token_expiry: 1
+    }, { start_datetime: '2026-09-20T10:00:00', end_datetime: '2026-09-20T11:00:00' });
+    assert.strictEqual(typeof getTokenHandler(), 'function');
+    await getTokenHandler()({
+        access_token: 'refreshed-calendar-access',
+        refresh_token: 'refreshed-calendar-refresh',
+        expiry_date: 987
+    });
+    const write = writes.find(item => item.sql.includes('calendar_access_token'));
+    assert.strictEqual(realDb.decryptGoogleToken(write.params[0]), 'refreshed-calendar-access');
+    assert.strictEqual(realDb.decryptGoogleToken(write.params[1]), 'refreshed-calendar-refresh');
+    assert.ok(!write.params.includes('refreshed-calendar-access'));
+}
+
+async function testCalendarInvalidGrantClearsWithoutLeakingToken() {
+    for (const operation of ['insert', 'delete']) {
+        const events = [];
+        const secret = `calendar-${operation}-access-secret`;
+        const logs = captureConsole();
+        try {
+            const options = {
+                query: async (sql, params = []) => {
+                    events.push({ sql, params });
+                    if (sql.includes('SELECT teacher_id FROM available_slots')) return { rows: [{ teacher_id: 8 }] };
+                    return { rows: [], rowCount: 1 };
+                },
+                [`${operation}Error`]: new Error(`invalid_grant token=${secret}`)
+            };
+            const { service } = loadCalendarService(options);
+            const teacher = operation === 'delete'
+                ? { calendar_access_token: secret, calendar_refresh_token: 'refresh-secret' }
+                : { id: 8, calendar_access_token: secret, calendar_refresh_token: 'refresh-secret' };
+            if (operation === 'insert') {
+                await service.createCalendarEvent(teacher, { start_datetime: '2026-09-20T10:00:00', end_datetime: '2026-09-20T11:00:00' });
+            } else {
+                await service.deleteCalendarEvent(teacher, 'event-1');
+            }
+            assert.ok(events.some(event => event.sql.includes('calendar_access_token=NULL')), `${operation} must clear invalid credentials`);
+            assert.ok(!events.some(event => event.sql.includes('FROM users') && event.sql.includes('IS NOT NULL')));
+            assert.ok(!logs.output.join('\n').includes(secret));
+            assert.ok(!logs.output.join('\n').includes('refresh-secret'));
+        } finally {
+            logs.restore();
+        }
+    }
+}
+
+async function testCalendarDeleteNeverClearsAnAmbiguousOwner() {
+    const events = [];
+    const secret = 'ambiguous-calendar-access-secret';
+    const logs = captureConsole();
+    try {
+        const { service } = loadCalendarService({
+            query: async (sql, params = []) => {
+                events.push({ sql, params });
+                if (sql.includes('SELECT teacher_id FROM available_slots')) {
+                    return { rows: [{ teacher_id: 8 }, { teacher_id: 9 }] };
+                }
+                return { rows: [], rowCount: 1 };
+            },
+            deleteError: new Error(`invalid_grant token=${secret}`)
+        });
+        await service.deleteCalendarEvent({
+            calendar_access_token: secret,
+            calendar_refresh_token: 'ambiguous-calendar-refresh-secret'
+        }, 'duplicate-event-id');
+        assert.ok(!events.some(event => event.sql.includes('calendar_access_token=NULL')));
+        assert.ok(!logs.output.join('\n').includes(secret));
+    } finally {
+        logs.restore();
+    }
+}
+
+async function testCalendarCallbackInvalidGrantPreservesStoredCredentials() {
+    const events = [];
+    const secret = 'calendar-callback-access-secret';
+    const routes = loadCalendarRouter({
+        query: async (sql, params = []) => { events.push({ sql, params }); return { rows: [], rowCount: 1 }; },
+        getTokenError: new Error(`invalid_grant token=${secret}`)
+    });
+    const logs = captureConsole();
+    let res;
+    try {
+        res = createResponse();
+        await routes.get.get('/api/calendar/callback')({ query: { code: 'bad-code', state: signedState(42) } }, res, () => {});
+    } finally {
+        logs.restore();
+    }
+    assert.ok(!events.some(event => event.sql.includes('calendar_access_token=NULL')));
+    assert.strictEqual(res.redirectUrl, '/teacher/settings?calendar=error');
+    assert.ok(!logs.output.join('\n').includes(secret));
+}
+
+async function testBookingInvalidGrantClearsTeacherCredentials() {
+    const events = [];
+    const secret = 'calendar-booking-access-secret';
+    const routes = loadCalendarRouter({
+        query: async (sql, params = []) => {
+            events.push({ sql, params });
+            if (sql.includes('FROM students')) return { rows: [{ id: 12, name: 'Ana', assigned_teacher_id: 8 }] };
+            if (sql.includes('SELECT teacher_id, academy_id')) return { rows: [{ teacher_id: 8, academy_id: 3 }] };
+            if (sql.startsWith('UPDATE available_slots')) return { rows: [], rowCount: 1 };
+            if (sql.includes('SELECT * FROM available_slots')) return { rows: [{
+                id: 5,
+                teacher_id: 8,
+                start_datetime: '2026-09-20T10:00:00',
+                google_event_id: 'event-1'
+            }] };
+            if (sql.includes('SELECT * FROM users')) return { rows: [{
+                id: 8,
+                calendar_access_token: secret,
+                calendar_refresh_token: 'calendar-booking-refresh-secret'
+            }] };
+            if (sql.includes('SELECT email FROM users')) return { rows: [{ email: 'student@test.invalid' }] };
+            return { rows: [], rowCount: 1 };
+        },
+        calendarApi: () => ({ events: {
+            get: async () => { throw new Error(`invalid_grant token=${secret}`); },
+            patch: async () => {}
+        } })
+    });
+    const logs = captureConsole();
+    try {
+        const res = createResponse();
+        await routes.post.get('/api/calendar/slots/:id/book')({
+            user: { id: 22, academy_id: 3 },
+            params: { id: 5 }
+        }, res, () => {});
+        await new Promise(resolve => setImmediate(resolve));
+        assert.strictEqual(res.payload.success, true);
+        assert.ok(events.some(event => event.sql.includes('calendar_access_token=NULL') && event.params[0] === 8));
+        assert.ok(!logs.output.join('\n').includes(secret));
+    } finally {
+        logs.restore();
+    }
+}
+
 async function testInvalidGrantAlwaysClearsWithoutLeakingToken() {
     const writes = [];
     const logs = captureConsole();
@@ -366,6 +570,89 @@ async function testExplicitDisconnectAlwaysClears() {
     }
 }
 
+async function testCalendarDisconnectReportsSuccessfulRevocation() {
+    const events = [];
+    const routes = loadCalendarRouter({
+        query: async (sql, params = []) => {
+            events.push({ type: 'query', sql, params });
+            if (sql.startsWith('SELECT')) return { rows: [{
+                calendar_access_token: 'calendar-access-secret',
+                calendar_refresh_token: 'calendar-refresh-secret'
+            }] };
+            return { rows: [], rowCount: 1 };
+        },
+        revokeToken: async token => events.push({ type: 'revoke', token })
+    });
+    const res = createResponse();
+    await routes.delete.get('/api/calendar/disconnect')({ user: { id: 42 } }, res, () => {});
+    assert.strictEqual(res.payload.revocation, 'revoked');
+    assert.ok(events.some(event => event.type === 'revoke' && event.token === 'calendar-refresh-secret'));
+    assert.ok(events.some(event => event.type === 'query' && event.sql.includes('calendar_access_token=NULL')));
+    assert.ok(!JSON.stringify(res.payload).includes('secret'));
+}
+
+async function testCorruptCiphertextCannotBlockLocalCleanup() {
+    for (const [loadRouter, pathName, prefix] of [
+        [loadCalendarRouter, '/api/calendar/disconnect', 'calendar'],
+        [loadGmailRouter, '/api/gmail/disconnect', 'gmail']
+    ]) {
+        const events = [];
+        const routes = loadRouter({
+            query: async (sql, params = []) => {
+                events.push({ sql, params });
+                if (sql.startsWith('SELECT')) throw new Error('unable to authenticate token=secret-ciphertext');
+                return { rows: [], rowCount: 1 };
+            }
+        });
+        const logs = captureConsole();
+        let res;
+        try {
+            res = createResponse();
+            await routes.delete.get(pathName)({ user: { id: 42 } }, res, () => {});
+        } finally {
+            logs.restore();
+        }
+        assert.strictEqual(res.statusCode, 200);
+        assert.ok(events.some(event => event.sql.includes(`${prefix}_access_token=NULL`) && event.params[0] === 42));
+        assert.ok(!JSON.stringify(res.payload).includes('secret-ciphertext'));
+        assert.ok(!logs.output.join('\n').includes('secret-ciphertext'));
+    }
+
+    for (const user of [
+        { id: 9, role: 'teacher', academy_id: 3 },
+        { id: 1, role: 'admin', academy_id: 3 }
+    ]) {
+        const events = [];
+        const routes = loadAuthRouter({
+            query: async (sql, params = []) => {
+                events.push({ type: 'query', sql, params });
+                if (sql.startsWith('SELECT')) throw new Error('unable to authenticate token=secret-ciphertext');
+                return { rows: [], rowCount: 1 };
+            },
+            withTransaction: async work => work({ query: async (sql, params) => {
+                events.push({ type: 'transaction', sql, params });
+                return { rows: [], rowCount: 1 };
+            } }),
+            revokeToken: async () => { throw new Error('must not be called'); }
+        });
+        const logs = captureConsole();
+        let res;
+        try {
+            res = createResponse();
+            await routes.delete.get('/api/auth/delete-account')({ user }, res, () => {});
+        } finally {
+            logs.restore();
+        }
+        assert.strictEqual(res.statusCode, 200);
+        const clear = events.find(event => event.type === 'query' && event.sql.includes('calendar_access_token=NULL'));
+        assert.ok(clear);
+        assert.deepStrictEqual(clear.params, [user.role === 'admin' ? user.academy_id : user.id]);
+        assert.ok(events.some(event => event.type === 'transaction' && event.sql.includes('DELETE FROM users')));
+        assert.ok(!JSON.stringify(res.payload).includes('secret-ciphertext'));
+        assert.ok(!logs.output.join('\n').includes('secret-ciphertext'));
+    }
+}
+
 async function testAccountDeletionRevokesAndClearsForAdminAndUser() {
     for (const user of [
         { id: 9, role: 'teacher', academy_id: 3 },
@@ -428,9 +715,16 @@ async function testAccountDeletionRevokesAndClearsForAdminAndUser() {
         testSqliteMigratesAndTransparentlyDecryptsTokens,
         testSuccessfulConnectionsStoreCiphertext,
         testRefreshPersistsCiphertext,
+        testCalendarRefreshPersistsCiphertext,
         testInvalidGrantAlwaysClearsWithoutLeakingToken,
+        testCalendarInvalidGrantClearsWithoutLeakingToken,
+        testCalendarDeleteNeverClearsAnAmbiguousOwner,
+        testCalendarCallbackInvalidGrantPreservesStoredCredentials,
+        testBookingInvalidGrantClearsTeacherCredentials,
         testGmailCheckErrorDoesNotLeakToken,
         testExplicitDisconnectAlwaysClears,
+        testCalendarDisconnectReportsSuccessfulRevocation,
+        testCorruptCiphertextCannotBlockLocalCleanup,
         testAccountDeletionRevokesAndClearsForAdminAndUser
     ];
     let failures = 0;

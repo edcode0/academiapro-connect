@@ -5,7 +5,13 @@ const router    = express.Router();
 const crypto    = require('crypto');
 const db        = require('../db');
 const { google } = require('googleapis');
-const { makeOAuth2Client, createCalendarEvent, deleteCalendarEvent } = require('../services/calendar');
+const {
+    makeCalendarOAuth2Client,
+    clearCalendarTokens,
+    clearCalendarOnInvalidGrant,
+    createCalendarEvent,
+    deleteCalendarEvent
+} = require('../services/calendar');
 const { authenticateJWT, JWT_SECRET } = require('../middleware/auth');
 const { requireStudent, requireTeacherOrAdmin } = require('../middleware/roles');
 
@@ -220,7 +226,7 @@ router.delete('/api/calendar/slots/:id', authenticateJWT, async (req, res, next)
 
         // Delete from Google Calendar (non-blocking) — use slot owner's tokens, not requester's
         if (slot.google_event_id) {
-            const teacherRes = await db.query('SELECT calendar_access_token, calendar_refresh_token FROM users WHERE id = $1', [slot.teacher_id]);
+            const teacherRes = await db.query('SELECT id, calendar_access_token, calendar_refresh_token FROM users WHERE id = $1', [slot.teacher_id]);
             deleteCalendarEvent(teacherRes.rows[0], slot.google_event_id).catch(e =>
                 console.error('[Calendar] Delete event error:', e.message)
             );
@@ -307,14 +313,14 @@ router.post('/api/calendar/slots/:id/book', authenticateJWT, requireStudent, asy
             // Update Google Calendar event with student as attendee (non-blocking)
             if (slot.google_event_id) {
                 (async () => {
+                    let teacher = { id: slot.teacher_id };
                     try {
                         const teacherRes = await db.query('SELECT * FROM users WHERE id = $1', [slot.teacher_id]);
                         const studentUserRes = await db.query('SELECT email FROM users WHERE id = $1', [req.user.id]);
-                        const teacher = teacherRes.rows[0];
+                        teacher = teacherRes.rows[0] || teacher;
                         const studentEmail = studentUserRes.rows[0]?.email;
                         if (teacher?.calendar_access_token && studentEmail) {
-                            const auth = makeOAuth2Client();
-                            auth.setCredentials({ access_token: teacher.calendar_access_token, refresh_token: teacher.calendar_refresh_token });
+                            const auth = makeCalendarOAuth2Client(teacher);
                             const gcal = google.calendar({ version: 'v3', auth });
                             const existing = await gcal.events.get({ calendarId: 'primary', eventId: slot.google_event_id });
                             const attendees = [...(existing.data.attendees || []), { email: studentEmail }];
@@ -326,7 +332,10 @@ router.post('/api/calendar/slots/:id/book', authenticateJWT, requireStudent, asy
                             });
                         }
                     } catch (e) {
-                        console.error('[Calendar] Book update error:', e.message);
+                        const invalidGrant = await clearCalendarOnInvalidGrant(e, teacher);
+                        console.error(invalidGrant
+                            ? '[Calendar] Credentials revoked while updating booking; local connection cleared'
+                            : '[Calendar] Booking update failed');
                     }
                 })();
             }
@@ -440,16 +449,17 @@ router.get('/api/calendar/status', authenticateJWT, async (req, res, next) => {
 });
 
 router.delete('/api/calendar/disconnect', authenticateJWT, requireTeacherOrAdmin, async (req, res, next) => {
+    let revocation = 'not_needed';
     try {
-        const result = await db.query(
-            'SELECT calendar_access_token, calendar_refresh_token FROM users WHERE id=$1',
-            [req.user.id]
-        );
-        const user = result.rows[0];
-        const token = user?.calendar_refresh_token || user?.calendar_access_token;
-        let revocation = token ? 'failed' : 'not_needed';
-        if (token) {
-            try {
+        try {
+            const result = await db.query(
+                'SELECT calendar_access_token, calendar_refresh_token FROM users WHERE id=$1',
+                [req.user.id]
+            );
+            const user = result.rows[0];
+            const token = user?.calendar_refresh_token || user?.calendar_access_token;
+            revocation = token ? 'failed' : 'not_needed';
+            if (token) {
                 const oauth2Client = new google.auth.OAuth2(
                     process.env.GOOGLE_CLIENT_ID,
                     process.env.GOOGLE_CLIENT_SECRET,
@@ -457,14 +467,12 @@ router.delete('/api/calendar/disconnect', authenticateJWT, requireTeacherOrAdmin
                 );
                 await oauth2Client.revokeToken(token);
                 revocation = 'revoked';
-            } catch {
-                console.warn('[Calendar] Grant revocation failed; clearing local credentials');
             }
+        } catch {
+            revocation = 'failed';
+            console.warn('[Calendar] Grant could not be read or revoked; clearing local credentials');
         }
-        await db.query(
-            'UPDATE users SET calendar_access_token=NULL, calendar_refresh_token=NULL, calendar_token_expiry=NULL WHERE id=$1',
-            [req.user.id]
-        );
+        await clearCalendarTokens(req.user.id);
         res.json({ success: true, revocation });
     } catch (err) {
         next(err);
