@@ -312,12 +312,14 @@
             <div id="calendar-status-badge" style="margin-top:1rem;padding:0.6rem 1rem;border-radius:0.5rem;display:inline-block;font-weight:600;font-size:0.9rem;">Cargando...</div>
             <div style="margin-top:1.5rem;">
                 <button class="btn btn-primary" id="calendar-connect-btn" onclick="connectCalendar()">📅 Conectar Google Calendar</button>
+                <button class="btn btn-ghost" onclick="disconnectGoogle('calendar')">Desconectar Calendar</button>
             </div>
         </div>
 
         <div class="settings-card" id="gmail-card">
             <h3>📧 Gmail &amp; Transcripciones Automáticas</h3>
             <p class="desc">Conecta tu Gmail para que AcademiaPro detecte automáticamente las transcripciones de Google Meet y las envíe al chat del alumno.</p>
+            <p class="desc">El acceso es de solo lectura. Para asociar la transcripción al alumno, se envían a DeepSeek hasta 8.000 caracteres del mensaje y los nombres necesarios. Consulta la <a href="/privacy.html" target="_blank" rel="noopener noreferrer">política de privacidad</a> antes de autorizar.</p>
 
             <div id="gmail-status-badge" style="margin-top:1rem;padding:0.6rem 1rem;border-radius:0.5rem;display:inline-block;font-weight:600;font-size:0.9rem;">Cargando...</div>
 
@@ -332,6 +334,7 @@
 
             <div style="margin-top:1.5rem;display:flex;gap:0.75rem;flex-wrap:wrap;">
                 <button class="btn btn-primary" id="gmail-connect-btn" onclick="connectGmail()">🔗 Conectar Gmail</button>
+                <button class="btn btn-ghost" onclick="disconnectGoogle('gmail')">Desconectar Gmail</button>
                 <button class="btn btn-ghost" onclick="checkTranscriptsNow(event)">🔄 Buscar transcripciones ahora</button>
             </div>
         </div>
@@ -449,6 +452,14 @@
             const res = await fetch('/api/calendar/connect', { credentials: 'include' });
             const data = await res.json();
             if (data.authUrl) window.location.href = data.authUrl;
+        }
+
+        async function disconnectGoogle(provider) {
+            if (!confirm(`¿Desconectar Google ${provider === 'gmail' ? 'Gmail' : 'Calendar'}?`)) return;
+            const res = await fetch(`/api/${provider}/disconnect`, { method: 'DELETE', credentials: 'include' });
+            if (!res.ok) return showToast('No se pudo desconectar la integración', 'error');
+            showToast(`Google ${provider === 'gmail' ? 'Gmail' : 'Calendar'} desconectado`, 'success');
+            provider === 'gmail' ? loadGmailStatus() : loadCalendarStatus();
         }
 
         async function loadCalendarStatus() {
