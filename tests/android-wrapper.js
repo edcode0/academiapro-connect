@@ -27,7 +27,7 @@ assert.equal(twa.startUrl, '/');
 assert.equal(twa.iconUrl, 'https://academiapro.academy/icon-512.png');
 assert.equal(twa.webManifestUrl, 'https://academiapro.academy/manifest.webmanifest');
 assert.ok(twa.fingerprints.includes(
-  '77:3D:FB:6F:CD:F5:0F:67:0C:93:DE:7E:16:70:76:9B:DE:52:E8:BB:A6:9B:80:3C:39:BD:D3:7A:A8:7E:4D:DA'
+  'EC:6F:FB:30:3B:51:FF:C0:15:F8:BF:49:C0:97:D9:26:36:A7:95:29:F3:51:F8:8F:1C:D7:38:1D:A4:CA:3B:28'
 ));
 
 const assetLinksPath = path.join(root, 'public/.well-known/assetlinks.json');
@@ -37,7 +37,7 @@ assert.ok(assetLinks.some(entry =>
   entry.target?.namespace === 'android_app' &&
   entry.target.package_name === 'academy.academiapro.app' &&
   entry.target.sha256_cert_fingerprints?.includes(
-    '77:3D:FB:6F:CD:F5:0F:67:0C:93:DE:7E:16:70:76:9B:DE:52:E8:BB:A6:9B:80:3C:39:BD:D3:7A:A8:7E:4D:DA'
+    'EC:6F:FB:30:3B:51:FF:C0:15:F8:BF:49:C0:97:D9:26:36:A7:95:29:F3:51:F8:8F:1C:D7:38:1D:A4:CA:3B:28'
   )
 ));
 

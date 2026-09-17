@@ -44,7 +44,7 @@ El build local actual se ha validado con `targetSdkVersion 36`.
 La huella de la clave local de subida usada ahora es:
 
 ```text
-77:3D:FB:6F:CD:F5:0F:67:0C:93:DE:7E:16:70:76:9B:DE:52:E8:BB:A6:9B:80:3C:39:BD:D3:7A:A8:7E:4D:DA
+EC:6F:FB:30:3B:51:FF:C0:15:F8:BF:49:C0:97:D9:26:36:A7:95:29:F3:51:F8:8F:1C:D7:38:1D:A4:CA:3B:28
 ```
 
 La contraseña de la clave no se guarda en Git. Conserva una copia segura del
