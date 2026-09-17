@@ -26,7 +26,7 @@ assert.match(transcripts, /class="transcripts-layout"/);
 assert.match(transcripts, /#historyCard[\s\S]*table-layout:\s*fixed/);
 assert.match(teacherCalendar, /<main class="calendar-page">/);
 assert.match(teacherCalendar, /class="card calendar-card"/);
-assert.match(teacherCalendar, /\.calendar-page[\s\S]*\.fc \.fc-toolbar/);
+assert.match(teacherCalendar, /#calendar \.fc-toolbar/);
 assert.match(chat, /#conversation-list #mobile-chat-bar[\s\S]*display:\s*flex/);
 assert.match(chat, /#chat-header \.hamburger-btn[\s\S]*display:\s*inline-flex/);
 assert.match(aiTutor, /grid-template-columns:\s*auto minmax\(0, 1fr\)/);
