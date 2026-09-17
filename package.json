@@ -6,9 +6,10 @@
   "scripts": {
     "start": "node index.js",
     "dev": "node --watch index.js",
-    "test": "npm run test:android-wrapper && npm run test:sidebar-mobile && npm run test:oauth-scopes && npm run test:oauth-token-lifecycle && npm run test:meet-owner-resolution && npm run test:smoke && npm run test:socket-authz && npm run test:gmail",
+    "test": "npm run test:android-wrapper && npm run test:sidebar-mobile && npm run test:mobile-layout && npm run test:oauth-scopes && npm run test:oauth-token-lifecycle && npm run test:meet-owner-resolution && npm run test:smoke && npm run test:socket-authz && npm run test:gmail",
     "test:android-wrapper": "node tests/android-wrapper.js",
     "test:sidebar-mobile": "node tests/sidebar-mobile.js",
+    "test:mobile-layout": "node tests/mobile-layout.js",
     "test:gmail": "node tests/gmail-resilience.js",
     "test:meet-owner-resolution": "node tests/meet-owner-resolution.js",
     "test:oauth-scopes": "node tests/oauth-scopes.js",

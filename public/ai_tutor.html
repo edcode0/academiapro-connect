@@ -589,6 +589,70 @@
     </style>
     <link rel="stylesheet" href="/glassmorphism.css">
     <link rel="stylesheet" href="/shared-dashboard.css">
+    <style>
+        @media (max-width: 640px) {
+            .app-container,
+            .app-container > main {
+                min-width: 0;
+                width: 100%;
+            }
+
+            .app-container > main {
+                margin-left: 0 !important;
+                padding: 0 !important;
+            }
+
+            .app-container .header {
+                height: auto;
+                min-height: 70px;
+                align-items: flex-start;
+                padding: 0.75rem 1rem;
+            }
+
+            .app-container .header-title,
+            .app-container .header-subtitle {
+                max-width: 100%;
+                min-width: 0;
+            }
+
+            .app-container .header-title {
+                font-size: 1.1rem;
+                overflow-wrap: anywhere;
+            }
+
+            .app-container .chat-messages {
+                min-width: 0;
+                padding: 1rem;
+                gap: 1rem;
+            }
+
+            .app-container .message,
+            .app-container .message-content-wrapper,
+            .app-container .bubble {
+                min-width: 0;
+                max-width: 100%;
+            }
+
+            .app-container .chat-input-area {
+                padding: 0.75rem;
+            }
+
+            .app-container .suggestions {
+                max-width: 100%;
+                flex-wrap: nowrap;
+                overflow-x: auto;
+            }
+
+            .app-container .suggestion-chip {
+                flex: 0 0 auto;
+            }
+
+            .app-container .input-wrapper,
+            .app-container .chat-input {
+                min-width: 0;
+            }
+        }
+    </style>
     <script src="/global.js"></script>
 </head>
 

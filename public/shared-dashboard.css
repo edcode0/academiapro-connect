@@ -731,7 +731,89 @@ td { padding: 1rem; border-bottom: 1px solid var(--border); font-size: 0.875rem;
 @media (max-width: 1024px) {
     body { overflow-x: hidden; }
     main { min-width: 0; overflow-x: hidden; }
+    main > *,
+    main .card,
+    main .stats-grid,
+    main .lower,
+    main .calendar-section,
+    main .transcripts-layout {
+        min-width: 0;
+        max-width: 100%;
+    }
     main .card { max-width: 100%; overflow-x: auto; }
+    main .lower,
+    main .calendar-section,
+    main .transcripts-layout {
+        grid-template-columns: 1fr !important;
+    }
+    main .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        min-width: 0;
+    }
+    main .controls > * {
+        max-width: 100%;
+        min-width: 0;
+    }
+    main .controls .search-container {
+        flex: 1 1 100%;
+        width: 100%;
+    }
+    main .form-grid {
+        grid-template-columns: 1fr !important;
+    }
+    main .full-width {
+        grid-column: auto !important;
+    }
+    main .filter-pills {
+        max-width: 100%;
+        overflow-x: auto;
+        overscroll-behavior-x: contain;
+        scrollbar-width: thin;
+    }
+    main .filter-pills .pill { flex: 0 0 auto; }
+    main .calendar-section > *,
+    main .transcripts-layout > * {
+        min-width: 0;
+    }
+    main .calendar-header {
+        flex-wrap: wrap;
+        gap: 0.75rem;
+    }
+    main .month-nav {
+        min-width: 0;
+        max-width: 100%;
+        flex-wrap: wrap;
+    }
+    main .current-month { min-width: 0; }
+    main .calendar-grid { min-width: 0; }
+    main .day-name {
+        padding: 0.5rem 0.2rem;
+        font-size: 0.7rem;
+    }
+    main .day-cell {
+        min-height: 72px;
+        padding: 0.35rem;
+    }
+    main #teachers-config-list .form-grid {
+        grid-template-columns: 1fr !important;
+    }
+    main #teachers-config-list .form-grid > div:last-child {
+        display: flex;
+        flex-wrap: wrap;
+    }
+    main #teachers-config-list .form-grid > div:last-child .btn {
+        flex: 1 1 9rem;
+    }
+    main table { min-width: max-content; }
+    #chat-container,
+    #conversation-list,
+    #active-chat {
+        min-width: 0;
+        max-width: 100%;
+    }
+    #chat-container { overflow-x: hidden; }
     main > .header,
     main > .page-header,
     main > .header-profile,
@@ -739,6 +821,14 @@ td { padding: 1rem; border-bottom: 1px solid var(--border); font-size: 0.875rem;
         min-width: 0;
         flex-wrap: wrap;
         gap: 0.75rem;
+    }
+    main > .header > div,
+    main > .page-header > div,
+    main > .header-profile > div,
+    main > header > div {
+        min-width: 0;
+        max-width: 100%;
+        flex-wrap: wrap;
     }
     main > .header h2,
     main > .page-header h2,
@@ -782,6 +872,15 @@ td { padding: 1rem; border-bottom: 1px solid var(--border); font-size: 0.875rem;
 @media (max-width: 640px) {
     .stats-grid { grid-template-columns: 1fr !important; }
     main { padding: 1.5rem; }
+    main .card { padding: 1rem; }
+    main .day-name {
+        padding: 0.4rem 0.1rem;
+        font-size: 0.6rem;
+    }
+    main .day-cell {
+        min-height: 60px;
+        padding: 0.25rem;
+    }
     .modal { width: calc(100vw - 2rem) !important; max-width: none; }
 }
 
