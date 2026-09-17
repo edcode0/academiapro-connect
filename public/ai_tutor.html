@@ -603,10 +603,22 @@
             }
 
             .app-container .header {
+                display: grid;
+                grid-template-columns: auto minmax(0, 1fr);
+                grid-template-rows: auto auto;
+                column-gap: 0.5rem;
+                row-gap: 0;
                 height: auto;
                 min-height: 70px;
-                align-items: flex-start;
+                align-items: center;
+                justify-content: initial;
+                flex-direction: initial;
                 padding: 0.75rem 1rem;
+            }
+
+            .app-container .header .hamburger-btn {
+                grid-column: 1;
+                grid-row: 1 / span 2;
             }
 
             .app-container .header-title,
@@ -616,8 +628,15 @@
             }
 
             .app-container .header-title {
+                grid-column: 2;
+                grid-row: 1;
                 font-size: 1.1rem;
                 overflow-wrap: anywhere;
+            }
+
+            .app-container .header-subtitle {
+                grid-column: 2;
+                grid-row: 2;
             }
 
             .app-container .chat-messages {

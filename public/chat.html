@@ -306,6 +306,28 @@
     </style>
     <link rel="stylesheet" href="/glassmorphism.css">
     <link rel="stylesheet" href="/shared-dashboard.css">
+    <style>
+        @media (max-width: 1024px) {
+            #conversation-list #mobile-chat-bar {
+                display: flex;
+            }
+
+            #chat-header {
+                min-width: 0;
+                flex-wrap: wrap;
+                gap: 0.5rem;
+            }
+
+            #chat-header .hamburger-btn {
+                display: inline-flex !important;
+            }
+
+            #chat-header .room-info {
+                min-width: 0;
+                flex: 1;
+            }
+        }
+    </style>
 </head>
 
 <body>

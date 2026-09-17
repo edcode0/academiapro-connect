@@ -261,6 +261,49 @@
     <link rel="stylesheet" href="/glassmorphism.css">
     <link rel="stylesheet" href="/shared-dashboard.css">
     <script src="/global.js"></script>
+    <style>
+        @media (max-width: 640px) {
+            #historyCard {
+                overflow: visible;
+            }
+
+            #historyCard table {
+                min-width: 0 !important;
+                table-layout: fixed;
+            }
+
+            #historyCard th,
+            #historyCard td {
+                padding: 0.65rem 0.35rem;
+                font-size: 0.72rem;
+                overflow-wrap: anywhere;
+            }
+
+            #historyCard th:nth-child(1),
+            #historyCard td:nth-child(1) { width: 25%; }
+
+            #historyCard th:nth-child(2),
+            #historyCard td:nth-child(2) { width: 31%; }
+
+            #historyCard th:nth-child(3),
+            #historyCard td:nth-child(3) { width: 44%; }
+
+            #historyCard td:nth-child(3) .btn {
+                width: 100%;
+                padding: 0.35rem 0.25rem !important;
+                white-space: normal;
+                line-height: 1.15;
+            }
+
+            #pending-section,
+            #pending-list,
+            #pending-list > div {
+                min-width: 0;
+                max-width: 100%;
+                overflow-wrap: anywhere;
+            }
+        }
+    </style>
 </head>
 
 <body>
