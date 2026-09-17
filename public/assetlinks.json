@@ -5,7 +5,8 @@
       "namespace": "android_app",
       "package_name": "academy.academiapro.app",
       "sha256_cert_fingerprints": [
-        "EC:6F:FB:30:3B:51:FF:C0:15:F8:BF:49:C0:97:D9:26:36:A7:95:29:F3:51:F8:8F:1C:D7:38:1D:A4:CA:3B:28"
+        "EC:6F:FB:30:3B:51:FF:C0:15:F8:BF:49:C0:97:D9:26:36:A7:95:29:F3:51:F8:8F:1C:D7:38:1D:A4:CA:3B:28",
+        "B1:B8:6D:C8:3D:C2:77:81:BB:84:F2:8B:BF:CA:CE:53:73:EE:6C:67:38:4F:FF:30:83:61:37:07:25:8A:6C:5E"
       ]
     }
   }
