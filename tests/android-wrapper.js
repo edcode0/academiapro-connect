@@ -17,6 +17,7 @@ assert.ok(manifest.icons.some(icon => icon.src === '/favicon-192.png' && icon.si
 assert.ok(landing.includes('rel="manifest"'));
 assert.ok(landing.includes('/manifest.webmanifest'));
 assert.match(serverSource, /app\.get\('\/\.well-known\/assetlinks\.json'/);
+assert.match(serverSource, /public\/assetlinks\.json/);
 
 const twaPath = path.join(root, 'android/twa-manifest.json');
 assert.ok(fs.existsSync(twaPath));
@@ -30,7 +31,7 @@ assert.ok(twa.fingerprints.includes(
   'EC:6F:FB:30:3B:51:FF:C0:15:F8:BF:49:C0:97:D9:26:36:A7:95:29:F3:51:F8:8F:1C:D7:38:1D:A4:CA:3B:28'
 ));
 
-const assetLinksPath = path.join(root, 'public/.well-known/assetlinks.json');
+const assetLinksPath = path.join(root, 'public/assetlinks.json');
 assert.ok(fs.existsSync(assetLinksPath));
 const assetLinks = JSON.parse(fs.readFileSync(assetLinksPath, 'utf8'));
 assert.ok(assetLinks.some(entry =>
