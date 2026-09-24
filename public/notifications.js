@@ -7,12 +7,27 @@
             position: fixed !important;
             top: 70px !important;
             right: 20px !important;
-            width: 380px !important;
-            max-height: 500px !important;
+            width: min(380px, calc(100vw - 32px)) !important;
+            max-height: min(500px, calc(100vh - 88px)) !important;
             overflow-y: auto !important;
             z-index: 9999 !important;
             box-shadow: 0 8px 30px rgba(0,0,0,0.15) !important;
             border-radius: 16px !important;
+        }
+        .notif-dropdown-header {
+            gap: 12px !important;
+            flex-wrap: wrap !important;
+        }
+        .notif-mark-all {
+            flex: 0 0 auto !important;
+            padding: 6px 10px !important;
+            border: 1px solid #ddd6fe !important;
+            border-radius: 999px !important;
+            background: #ede9fe !important;
+            color: #6d28d9 !important;
+            font-size: 12px !important;
+            line-height: 1.2 !important;
+            white-space: nowrap !important;
         }
     `;
     document.head.appendChild(style);
@@ -107,13 +122,12 @@
     };
 
     window.markAllNotifRead = async function () {
-        await fetch('/api/notifications/mark-all-read', {
+        const res = await fetch('/api/notifications/mark-all-read', {
             method: 'POST',
             credentials: 'include'
-        }).catch(() => {});
-        document.querySelectorAll('.notif-item.unread').forEach(el => el.classList.remove('unread'));
-        const badge = document.getElementById('notifBadge');
-        if (badge) badge.style.display = 'none';
+        });
+        if (!res.ok) throw new Error(`No se pudieron marcar las notificaciones (${res.status})`);
+        await loadNotifications();
     };
 
     // Close dropdown on outside click

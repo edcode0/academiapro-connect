@@ -304,8 +304,6 @@
         .kpi:hover { transform: translateY(-2px); box-shadow: 0 14px 28px -14px hsl(var(--hue) 50% 40% / .4); border-color: hsl(var(--hue) 60% 89%); }
         .kpi-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
         .kpi-ico { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; background: hsl(var(--hue) 76% 95%); color: hsl(var(--hue) 55% 47%); }
-        .kpi-more { border: 0 !important; background: transparent !important; color: #cbc7d8 !important; cursor: pointer !important; padding: 5px !important; border-radius: 8px !important; display: grid !important; place-items: center !important; font-weight: 400 !important; box-shadow: none !important; transition: .15s !important; }
-        .kpi-more:hover { color: #8b87a8 !important; background: #f4f2fa !important; border: 0 !important; border-radius: 8px !important; font-weight: 400 !important; box-shadow: none !important; transition: .15s !important; transform: none !important; }
         .kpi-label { font-size: 13.5px; font-weight: 600; color: var(--text-muted); }
         .kpi-val { font-size: 34px; font-weight: 800; letter-spacing: -.02em; margin-top: 2px; line-height: 1.15; }
         .kpi-foot { margin-top: 11px; font-size: 12.5px; font-weight: 600; color: #a29ebb; display: flex; align-items: center; gap: 5px; }
@@ -426,10 +424,6 @@
                         <div id="notifList" class="notif-list"><div class="notif-empty">No hay notificaciones</div></div>
                     </div>
                 </div>
-                <button class="btn-primary" onclick="openModal()">
-                    <span class="icon-slot" data-icon="plus" data-icon-size="18"></span>
-                    Nueva Inscripción
-                </button>
             </div>
         </header>
 
@@ -443,7 +437,6 @@
             <article class="kpi border-blue">
                 <div class="kpi-head">
                     <span class="kpi-ico"><span class="icon-slot" data-icon="users" data-icon-size="20"></span></span>
-                    <button class="kpi-more" type="button" aria-label="Más"><span class="icon-slot" data-icon="dots" data-icon-size="16"></span></button>
                 </div>
                 <div class="kpi-label">Total Estudiantes</div>
                 <div class="kpi-val" id="total-students">0</div>
@@ -452,16 +445,14 @@
             <article class="kpi border-green">
                 <div class="kpi-head">
                     <span class="kpi-ico"><span class="icon-slot" data-icon="clock" data-icon-size="20"></span></span>
-                    <button class="kpi-more" type="button" aria-label="Más"><span class="icon-slot" data-icon="dots" data-icon-size="16"></span></button>
                 </div>
                 <div class="kpi-label">Sesiones Registradas</div>
                 <div class="kpi-val" id="total-sessions">0</div>
-                <div class="kpi-foot">Sesiones en total</div>
+                <div class="kpi-foot">Sesiones este mes</div>
             </article>
             <article class="kpi border-orange" id="card-payments">
                 <div class="kpi-head">
                     <span class="kpi-ico"><span class="icon-slot" data-icon="card" data-icon-size="20"></span></span>
-                    <button class="kpi-more" type="button" aria-label="Más"><span class="icon-slot" data-icon="dots" data-icon-size="16"></span></button>
                 </div>
                 <div class="kpi-label">Pagos Pendientes</div>
                 <div class="kpi-val" id="pending-payments">0 €</div>
@@ -470,7 +461,6 @@
             <article class="kpi border-purple">
                 <div class="kpi-head">
                     <span class="kpi-ico"><span class="icon-slot" data-icon="chart" data-icon-size="20"></span></span>
-                    <button class="kpi-more" type="button" aria-label="Más"><span class="icon-slot" data-icon="dots" data-icon-size="16"></span></button>
                 </div>
                 <div class="kpi-label">Calificación Media</div>
                 <div class="kpi-val" id="avg-score">8.2</div>
@@ -495,56 +485,16 @@
                     </thead>
                     <tbody id="students-table"></tbody>
                 </table>
-                <button class="add-row" type="button" onclick="openModal()"><span class="icon-slot" data-icon="plus" data-icon-size="16"></span> Añadir estudiante</button>
             </article>
 
             <div class="panel">
                 <div class="panel-head">
                     <h2>Actividad Reciente</h2>
-                    <button class="kpi-more" type="button" aria-label="Más"><span class="icon-slot" data-icon="dots" data-icon-size="16"></span></button>
                 </div>
                 <div id="activity-list" class="feed"></div>
             </div>
         </section>
     </main>
-
-    <!-- New Student Modal -->
-    <div id="studentModal" class="modal-overlay">
-        <div class="modal">
-            <h3>Nueva Inscripción</h3>
-            <form id="studentForm">
-                <div class="form-group">
-                    <label>Nombre Completo</label>
-                    <input type="text" id="name" required placeholder="Ej: Juan Pérez">
-                </div>
-                <div class="form-group">
-                    <label>Curso</label>
-                    <select id="course" required>
-                        <option value="1º ESO">1º ESO</option>
-                        <option value="2º ESO">2º ESO</option>
-                        <option value="3º ESO">3º ESO</option>
-                        <option value="4º ESO">4º ESO</option>
-                        <option value="1º Bachillerato">1º Bachillerato</option>
-                        <option value="2º Bachillerato">2º Bachillerato</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Asignatura Principal</label>
-                    <input type="text" id="subject" required placeholder="Ej: Matemáticas">
-                </div>
-                <div class="form-group">
-                    <label>Profesor Asignado</label>
-                    <select id="assigned_teacher_id">
-                        <option value="">Sin asignar</option>
-                    </select>
-                </div>
-                <div class="modal-actions">
-                    <button type="button" class="btn-secondary" onclick="closeModal()">Cancelar</button>
-                    <button type="submit">Guardar</button>
-                </div>
-            </form>
-        </div>
-    </div>
 
     <script>
         // Token is managed as httpOnly cookie by the server — no URL token handling needed
@@ -587,7 +537,7 @@
 
                 const table = document.getElementById('students-table');
                 table.innerHTML = students.length === 0
-                    ? `<tr><td colspan="4" class="cell empty-state">No hay alumnos registrados aún. <a href="#" onclick="openModal()">Añade el primero →</a></td></tr>`
+                    ? `<tr><td colspan="4" class="cell empty-state">No hay alumnos registrados aún. Comparte un código o enlace desde Configuración.</td></tr>`
                     : students.slice(0, 5).map(s => `
                     <tr class="trow">
                         <td class="cell name"><div class="cell name-inner"><span class="mini-av">${escapeHtml((s.name || 'A')[0].toLowerCase())}</span><a href="/student/${s.id}">${escapeHtml(s.name)}</a></div></td>
@@ -599,7 +549,9 @@
 
                 const sessRes = await fetch('/api/sessions', { credentials: 'include' });
                 const sessions = await sessRes.json();
-                document.getElementById('total-sessions').textContent = sessions.length;
+                const currentMonth = new Date().toISOString().slice(0, 7);
+                const sessionsThisMonth = sessions.filter(s => String(s.date).slice(0, 7) === currentMonth);
+                document.getElementById('total-sessions').textContent = sessionsThisMonth.length;
 
                 const payRes = await fetch('/api/payments', { credentials: 'include' });
                 const payments = await payRes.json();
@@ -619,7 +571,7 @@
                 document.getElementById('avg-score').textContent = avg;
 
                 const activityList = document.getElementById('activity-list');
-                const recentSessions = sessions.slice(-5).reverse();
+                const recentSessions = sessionsThisMonth.slice(-5).reverse();
                 activityList.innerHTML = recentSessions.length === 0
                     ? `<p class="empty-state">Sin actividad reciente.</p>`
                     : recentSessions.map(s => {
@@ -637,35 +589,6 @@
 
             } catch (err) { console.error(err); }
         }
-
-        async function openModal() {
-            document.getElementById('studentModal').style.display = 'flex';
-            const res = await fetch('/api/chat/contacts', { credentials: 'include' });
-            if (res.ok) {
-                const contacts = await res.json();
-                document.getElementById('assigned_teacher_id').innerHTML = '<option value="">Sin asignar</option>' +
-                    contacts.filter(c => c.role === 'teacher').map(t => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
-            }
-        }
-        function closeModal() { document.getElementById('studentModal').style.display = 'none'; }
-
-        document.getElementById('studentForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const data = {
-                name: document.getElementById('name').value,
-                course: document.getElementById('course').value,
-                subject: document.getElementById('subject').value,
-                assigned_teacher_id: document.getElementById('assigned_teacher_id').value || null,
-                join_date: new Date().toISOString().split('T')[0]
-            };
-            const res = await fetch('/api/students', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify(data)
-            });
-            if (res.ok) { closeModal(); loadDashboard(); }
-        });
 
         loadDashboard();
         initNotifications();
