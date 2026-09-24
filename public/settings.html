@@ -79,6 +79,13 @@
             gap: 0.5rem;
         }
 
+        .section-title-row { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+        .section-title-row h3 { margin-bottom: 0.4rem; }
+        .section-description { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.25rem; }
+        .info-button { width: 28px; height: 28px; border: 1px solid #c4b5fd; border-radius: 50%; background: #ede9fe; color: #6d28d9; font-weight: 800; cursor: pointer; flex: 0 0 auto; }
+        .info-button:hover, .info-button[aria-expanded="true"] { background: #ddd6fe; }
+        .info-popover { margin: 0 0 1.25rem; padding: 0.85rem 1rem; border: 1px solid #c4b5fd; border-radius: 0.75rem; background: #f5f3ff; color: #5b21b6; font-size: 0.875rem; line-height: 1.5; }
+
         .form-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -391,7 +398,16 @@
 
         <!-- Section: Configuración de Profesores (New) -->
         <div class="settings-section">
-            <h3>👨‍🏫 Configuración de Profesores</h3>
+            <div class="section-title-row">
+                <div>
+                    <h3>👨‍🏫 Configuración de Profesores</h3>
+                    <p class="section-description">Define cuánto cobra cada profesor por hora individual y por clase grupal.</p>
+                </div>
+                <button type="button" class="info-button" aria-label="Información sobre las tarifas" aria-expanded="false" aria-controls="teacher-rates-help" onclick="toggleTeacherRatesHelp(this)">i</button>
+            </div>
+            <div id="teacher-rates-help" class="info-popover" hidden>
+                Indica la tarifa por hora de cada profesor para clases individuales y grupales. Estos importes se utilizan para calcular cuánto debes pagarles en los resúmenes mensuales.
+            </div>
             <div id="teachers-config-list" style="display: flex; flex-direction: column; gap: 1rem;">
                 <p>Cargando profesores...</p>
             </div>
@@ -564,8 +580,8 @@
                             <div class="form-group" style="margin-bottom: 0;">
                                 <label style="font-weight: 600; color: var(--primary);">${t.name}</label>
                                 <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
-                                    <input type="number" id="t_rate_${t.id}" value="${t.hourly_rate || 0}" step="0.5" min="0" placeholder="💰 Individual €/h" style="flex:1;" title="Tarifa individual €/hora">
-                                    <input type="number" id="t_group_rate_${t.id}" value="${t.group_hourly_rate || 0}" step="0.5" min="0" placeholder="👥 Grupal €/h" style="flex:1; border-color:#c4b5fd;" title="Tarifa grupal €/hora">
+                                    <label style="flex:1;">💰 Individual €/h<input type="number" id="t_rate_${t.id}" value="${t.hourly_rate > 0 ? t.hourly_rate : ''}" step="0.5" min="0" placeholder="Ej. 15" title="Tarifa individual por hora"></label>
+                                    <label style="flex:1;">👥 Grupal €/h<input type="number" id="t_group_rate_${t.id}" value="${t.group_hourly_rate > 0 ? t.group_hourly_rate : ''}" step="0.5" min="0" placeholder="Ej. 10" title="Tarifa grupal por hora"></label>
                                 </div>
                             </div>
                             <div style="display: flex; gap: 0.5rem;">
@@ -578,6 +594,13 @@
             } catch (err) {
                 console.error(err);
             }
+        }
+
+        function toggleTeacherRatesHelp(button) {
+            const help = document.getElementById('teacher-rates-help');
+            const expanded = button.getAttribute('aria-expanded') === 'true';
+            button.setAttribute('aria-expanded', String(!expanded));
+            help.hidden = expanded;
         }
 
         async function saveTeacherRate(id) {

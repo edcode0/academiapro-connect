@@ -60,7 +60,11 @@ module.exports = function makeChatRouter(io) {
                       WHERE rm_sub.room_id = r.id AND u.id != $1
                       LIMIT 1)
                 END as other_role,
-                (SELECT CASE WHEN content = '' OR content IS NULL THEN '📎 Archivo adjunto' ELSE content END FROM messages WHERE room_id = r.id ORDER BY created_at DESC LIMIT 1) as last_message,
+                (SELECT CASE
+                    WHEN type = 'html_card' OR content LIKE '<div%' THEN '📚 Resumen de clase'
+                    WHEN content = '' OR content IS NULL THEN '📎 Archivo adjunto'
+                    ELSE content
+                END FROM messages WHERE room_id = r.id ORDER BY created_at DESC LIMIT 1) as last_message,
                 (SELECT created_at FROM messages WHERE room_id = r.id ORDER BY created_at DESC LIMIT 1) as last_message_date,
                 (SELECT COUNT(*) FROM messages WHERE room_id = r.id AND read = FALSE AND sender_id != $1) as unread_count,
                 r.created_at

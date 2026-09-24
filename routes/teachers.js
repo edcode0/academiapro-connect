@@ -241,7 +241,7 @@ router.get('/api/teachers', authenticateJWT, requireAdmin, (req, res, next) => {
 });
 
 router.get('/api/teachers/rates', authenticateJWT, requireAdmin, (req, res, next) => {
-    db.query(`SELECT id, name, hourly_rate, group_hourly_rate FROM users WHERE academy_id = $1 AND role IN ('teacher', 'admin')`, [req.user.academy_id], (err, result) => {
+    db.query(`SELECT id, name, hourly_rate, group_hourly_rate FROM users WHERE academy_id = $1 AND role = 'teacher'`, [req.user.academy_id], (err, result) => {
         if (err) return next(err);
         res.json(result.rows);
     });

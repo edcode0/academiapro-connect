@@ -479,7 +479,7 @@
                 appendMessage(message);
                 markRoomAsRead(message.room_id);
             }
-            updateRoomLastMessage(message.room_id, message.content);
+            updateRoomLastMessage(message.room_id, roomPreview(message));
         });
 
         async function init() {
@@ -674,6 +674,11 @@
         async function markRoomAsRead(roomId) {
             await fetch(`/api/chat/mark-read/${roomId}`, { method: 'POST', credentials: 'include' });
             updateTotalUnread();
+        }
+
+        function roomPreview(message) {
+            if (message?.type === 'html_card' || /^<div[\s>]/i.test(String(message?.content || ''))) return '📚 Resumen de clase';
+            return message?.content || (message?.file_url ? '📎 Archivo adjunto' : 'Sin mensajes');
         }
 
         function updateRoomLastMessage(roomId, content) {
